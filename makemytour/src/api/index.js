@@ -6,9 +6,7 @@ export const login = async (email, password) => {
   try {
     const url = `${BACKEND_URL}/user/login?email=${email}&password=${password}`;
     const res = await axios.post(url);
-    const data = res.data;
-    // console.log(data);
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     throw error;
   }
@@ -29,9 +27,7 @@ export const signup = async (
       phoneNumber,
       password,
     });
-    const data = res.data;
-    // console.log(data);
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     throw error;
   }
@@ -40,8 +36,7 @@ export const signup = async (
 export const getuserbyemail = async (email) => {
   try {
     const res = await axios.get(`${BACKEND_URL}/user/email?email=${email}`);
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     throw error;
   }
@@ -61,17 +56,18 @@ export const editprofile = async (
       email,
       phoneNumber,
     });
-    const data = res.data;
-    return data;
-  } catch (error) {}
+    return res.data; // Fixed typo
+  } catch (error) {
+    throw error;
+  }
 };
+
 export const getflight = async () => {
   try {
     const res = await axios.get(`${BACKEND_URL}/flight`);
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
-    console.log(data);
+    console.error("Error fetching flights:", error);
   }
 };
 
@@ -94,8 +90,7 @@ export const addflight = async (
       price,
       availableSeats,
     });
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
@@ -121,8 +116,7 @@ export const editflight = async (
       price,
       availableSeats,
     });
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
@@ -131,10 +125,9 @@ export const editflight = async (
 export const gethotel = async () => {
   try {
     const res = await axios.get(`${BACKEND_URL}/hotel`);
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
-    console.log(data);
+    console.error("Error fetching hotels:", error);
   }
 };
 
@@ -153,8 +146,7 @@ export const addhotel = async (
       availableRooms,
       amenities,
     });
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
@@ -176,8 +168,7 @@ export const edithotel = async (
       availableRooms,
       amenities,
     });
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
@@ -187,8 +178,7 @@ export const handleflightbooking = async (userId, flightId, seats, price) => {
   try {
     const url = `${BACKEND_URL}/booking/flight?userId=${userId}&flightId=${flightId}&seats=${seats}&price=${price}`;
     const res = await axios.post(url);
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
@@ -198,8 +188,7 @@ export const handlehotelbooking = async (userId, hotelId, rooms, price) => {
   try {
     const url = `${BACKEND_URL}/booking/flight?userId=${userId}&hotelId=${hotelId}&rooms=${rooms}&price=${price}`;
     const res = await axios.post(url);
-    const data = res.data;
-    return data;
+    return res.data; // Fixed typo
   } catch (error) {
     console.log(error);
   }
