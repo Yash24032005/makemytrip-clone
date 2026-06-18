@@ -40,7 +40,7 @@ export default function BookFlightPage() {
       setTxnId(res.data.bookingId || "BK" + Math.floor(Date.now()/1000));
     } catch (err) {
       setTxnId("BK" + Math.floor(Date.now()/1000));
-    } bits {
+    } finally {
       setPaymentSuccess(true);
     }
   };

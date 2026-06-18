@@ -58,9 +58,15 @@ export default function Home() {
     fetchdata();
   }, [user]);
 
+  // 🚀 Dynamic Dropdown Auto-Populate Parser
   const cityOptions = useMemo(() => {
     const cities = new Set<string>();
     (flight || []).forEach((f) => {
+      if (f.delayReason && f.delayReason.includes("==>")) {
+        const parts = f.delayReason.split("==>");
+        if (parts[0]) cities.add(parts[0].trim());
+        if (parts[1]) cities.add(parts[1].trim());
+      }
       if (f.from) cities.add(f.from);
       if (f.to) cities.add(f.to);
     });
@@ -70,16 +76,36 @@ export default function Home() {
     return Array.from(cities).map((city) => ({ value: city, label: city }));
   }, [flight, hotel]);
 
+  // 🚀 Core Flight Search Logic Filter Mapping
   const handlesearch = () => {
     if (bookingtype === "flights") {
       const results = (flight || []).filter((f) => {
         if (!f) return false;
-        const flightFrom = f.from || f.From || "";
-        const flightTo = f.to || f.To || "";
+        let flightFrom = f.from || "";
+        let flightTo = f.to || "";
+        
+        if (f.delayReason && f.delayReason.includes("==>")) {
+          const parts = f.delayReason.split("==>");
+          flightFrom = parts[0] || "";
+          flightTo = parts[1] || "";
+        }
+        
         return (
-          String(flightFrom).toLowerCase() === String(from || "").toLowerCase() &&
-          String(flightTo).toLowerCase() === String(to || "").toLowerCase()
+          String(flightFrom).toLowerCase().trim() === String(from || "").toLowerCase().trim() &&
+          String(flightTo).toLowerCase().trim() === String(to || "").toLowerCase().trim()
         );
+      }).map(f => {
+        // Map dynamic virtual tags back onto the card interface parameters
+        if (f.delayReason && f.delayReason.includes("==>")) {
+          const parts = f.delayReason.split("==>");
+          return {
+            ...f,
+            from: parts[0] || "N/A",
+            to: parts[1] || "N/A",
+            price: parts[2] || "0"
+          };
+        }
+        return f;
       });
       setsearchresult(results);
     } else if (bookingtype === "hotels") {
@@ -153,9 +179,9 @@ export default function Home() {
                     {bookingtype === "flights" ? (
                       <>
                         <div>
-                          <p className="font-semibold text-lg text-gray-900">Flight Name: {result.flightName}</p>
+                          <p className="font-semibold text-lg text-gray-900">Flight Name: {result.flightName || result.flightId}</p>
                           <h3 className="font-semibold text-md text-gray-700 mt-1">{result.from} to {result.to}</h3>
-                          <p className="text-gray-600 text-xs mt-2">Departure Time: {formatDate(result.departureTime)}</p>
+                          <p className="text-gray-600 text-xs mt-2">Status: {result.status || "On Time"}</p>
                         </div>
                         <div className="mt-4 border-t pt-3 flex justify-between items-center">
                           <span className="text-xl font-bold text-green-700">₹{result.price}</span>
@@ -262,7 +288,7 @@ const DownloadApp = () => {
 
 function NavItem({ icon, text, active = false, onClick }: any) {
   return (
-    <button className={`flex flex-col items-center p-2 rounded-lg transition-colors ${active ? "text-blue-500 font-bold" : "text-gray-600 hover:text-blue-500"}`} onClick={onClick}>
+    <button className={`flex flex-col items-center p-2 rounded-lg transition-colors \${active ? "text-blue-500 font-bold" : "text-gray-600 hover:text-blue-500"}`} onClick={onClick}>
       {icon}
       <span className="text-sm mt-1 whitespace-nowrap">{text}</span>
     </button>
