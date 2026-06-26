@@ -14,7 +14,7 @@ export default function Home() {
   const [from, setfrom] = useState("");
   const [to, setto] = useState("");
   const [date, setdate] = useState("");
-  const [travelers, settravelers] = useState(1);6mbn
+  const [travelers, settravelers] = useState(1);
   const [searchresults, setsearchresult] = useState<any[]>([]);
   const [hotel, sethotel] = useState<any[]>([]);
   const [loading, setloading] = useState(true);
