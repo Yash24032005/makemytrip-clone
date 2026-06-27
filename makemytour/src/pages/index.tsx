@@ -58,7 +58,6 @@ export default function Home() {
     fetchdata();
   }, [user]);
 
-  // 🚀 Dynamic Dropdown Auto-Populate Parser
   const cityOptions = useMemo(() => {
     const cities = new Set<string>();
     (flight || []).forEach((f) => {
@@ -76,7 +75,6 @@ export default function Home() {
     return Array.from(cities).map((city) => ({ value: city, label: city }));
   }, [flight, hotel]);
 
-  // 🚀 Core Flight Search Logic Filter Mapping
   const handlesearch = () => {
     if (bookingtype === "flights") {
       const results = (flight || []).filter((f) => {
@@ -95,7 +93,6 @@ export default function Home() {
           String(flightTo).toLowerCase().trim() === String(to || "").toLowerCase().trim()
         );
       }).map(f => {
-        // Map dynamic virtual tags back onto the card interface parameters
         if (f.delayReason && f.delayReason.includes("==>")) {
           const parts = f.delayReason.split("==>");
           return {
@@ -116,12 +113,6 @@ export default function Home() {
       });
       setsearchresult(results);
     }
-  };
-
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return "Flexible Date";
-    const options: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
-    return new Date(dateString).toLocaleString("en-US", options);
   };
 
   const handlebooknow = (id: any) => {
@@ -288,7 +279,7 @@ const DownloadApp = () => {
 
 function NavItem({ icon, text, active = false, onClick }: any) {
   return (
-    <button className={`flex flex-col items-center p-2 rounded-lg transition-colors \${active ? "text-blue-500 font-bold" : "text-gray-600 hover:text-blue-500"}`} onClick={onClick}>
+    <button className={`flex flex-col items-center p-2 rounded-lg transition-colors ${active ? "text-blue-500 font-bold" : "text-gray-600 hover:text-blue-500"}`} onClick={onClick}>
       {icon}
       <span className="text-sm mt-1 whitespace-nowrap">{text}</span>
     </button>
