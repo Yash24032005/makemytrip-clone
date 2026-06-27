@@ -2,7 +2,7 @@
 // import axios from "axios";
 // import { Input } from "@/components/ui/input";
 // import { Button } from "@/components/ui/button";
-// import API_URL from "makemytour/src/apiConfig";
+// 
 // // import API_URL from "makemytour/src/api/api.js";
 
 // export default function AdminDashboard() {

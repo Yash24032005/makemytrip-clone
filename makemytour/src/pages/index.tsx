@@ -1,4 +1,4 @@
-// import { getflight, gethotel } from "@/api";
+// import { getflight, gethotel } from "../api";
 import { getflight, gethotel } from "../api/api";
 import Loader from "@/components/Loader";
 import { SearchSelect } from "@/components/SearchSelect";
