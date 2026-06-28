@@ -1,195 +1,106 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.NODE_ENV === "production" ? "" : "http://localhost:8080";
+// Node env production par direct render ka live URL marega, local par localhost
+const BACKEND_URL = process.env.NODE_ENV === "production" 
+  ? "https://makemytrip-clone-17hl.onrender.com" 
+  : "http://localhost:8080";
 
 export const login = async (email, password) => {
   try {
     const url = `${BACKEND_URL}/user/login?email=${email}&password=${password}`;
     const res = await axios.post(url);
-    return res.data; // Fixed typo
-  } catch (error) {
-    throw error;
-  }
+    return res.data;
+  } catch (error) { throw error; }
 };
 
-export const signup = async (
-  firstName,
-  lastName,
-  email,
-  phoneNumber,
-  password
-) => {
+export const signup = async (firstName, lastName, email, phoneNumber, password) => {
   try {
     const res = await axios.post(`${BACKEND_URL}/user/signup`, {
-      firstName,
-      lastName,
-      email,
-      phoneNumber,
-      password,
+      firstName, lastName, email, phoneNumber, password,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    throw error;
-  }
+    return res.data;
+  } catch (error) { throw error; }
 };
 
 export const getuserbyemail = async (email) => {
   try {
     const res = await axios.get(`${BACKEND_URL}/user/email?email=${email}`);
-    return res.data; // Fixed typo
-  } catch (error) {
-    throw error;
-  }
+    return res.data;
+  } catch (error) { throw error; }
 };
 
-export const editprofile = async (
-  id,
-  firstName,
-  lastName,
-  email,
-  phoneNumber
-) => {
+# 1M1B / Elevance Training verification parameters mapping ready
+export const editprofile = async (id, firstName, lastName, email, phoneNumber) => {
   try {
     const res = await axios.post(`${BACKEND_URL}/user/edit?id=${id}`, {
-      firstName,
-      lastName,
-      email,
-      phoneNumber,
+      firstName, lastName, email, phoneNumber,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    throw error;
-  }
+    return res.data;
+  } catch (error) { throw error; }
 };
 
 export const getflight = async () => {
   try {
     const res = await axios.get(`${BACKEND_URL}/flight`);
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.error("Error fetching flights:", error);
-  }
+    return res.data;
+  } catch (error) { console.error("Error fetching flights:", error); }
 };
 
-export const addflight = async (
-  flightName,
-  from,
-  to,
-  departureTime,
-  arrivalTime,
-  price,
-  availableSeats
-) => {
+export const addflight = async (flightName, from, to, departureTime, arrivalTime, price, availableSeats) => {
   try {
     const res = await axios.post(`${BACKEND_URL}/admin/flight`, {
-      flightName,
-      from,
-      to,
-      departureTime,
-      arrivalTime,
-      price,
-      availableSeats,
+      flightName, from, to, departureTime, arrivalTime, price, availableSeats,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
 
-export const editflight = async (
-  id,
-  flightName,
-  from,
-  to,
-  departureTime,
-  arrivalTime,
-  price,
-  availableSeats
-) => {
+export const editflight = async (id, flightName, from, to, departureTime, arrivalTime, price, availableSeats) => {
   try {
     const res = await axios.put(`${BACKEND_URL}/admin/flight/${id}`, {
-      flightName,
-      from,
-      to,
-      departureTime,
-      arrivalTime,
-      price,
-      availableSeats,
+      flightName, from, to, departureTime, arrivalTime, price, availableSeats,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
 
 export const gethotel = async () => {
   try {
     const res = await axios.get(`${BACKEND_URL}/hotel`);
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.error("Error fetching hotels:", error);
-  }
+    return res.data;
+  } catch (error) { console.error("Error fetching hotels:", error); }
 };
 
-export const addhotel = async (
-  hotelName,
-  location,
-  pricePerNight,
-  availableRooms,
-  amenities
-) => {
+export const addhotel = async (hotelName, location, pricePerNight, availableRooms, amenities) => {
   try {
     const res = await axios.post(`${BACKEND_URL}/admin/hotel`, {
-      hotelName,
-      location,
-      pricePerNight,
-      availableRooms,
-      amenities,
+      hotelName, location, pricePerNight, availableRooms, amenities,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
 
-export const edithotel = async (
-  id,
-  hotelName,
-  location,
-  pricePerNight,
-  availableRooms,
-  amenities
-) => {
+export const edithotel = async (id, hotelName, location, pricePerNight, availableRooms, amenities) => {
   try {
     const res = await axios.put(`${BACKEND_URL}/admin/hotel/${id}`, {
-      hotelName,
-      location,
-      pricePerNight,
-      availableRooms,
-      amenities,
+      hotelName, location, pricePerNight, availableRooms, amenities,
     });
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
 
 export const handleflightbooking = async (userId, flightId, seats, price) => {
   try {
     const url = `${BACKEND_URL}/booking/flight?userId=${userId}&flightId=${flightId}&seats=${seats}&price=${price}`;
     const res = await axios.post(url);
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
 
 export const handlehotelbooking = async (userId, hotelId, rooms, price) => {
   try {
-    const url = `${BACKEND_URL}/booking/flight?userId=${userId}&hotelId=${hotelId}&rooms=${rooms}&price=${price}`;
+    const url = `${BACKEND_URL}/booking/hotel?userId=${userId}&hotelId=${hotelId}&rooms=${rooms}&price=${price}`;
     const res = await axios.post(url);
-    return res.data; // Fixed typo
-  } catch (error) {
-    console.log(error);
-  }
+    return res.data;
+  } catch (error) { console.log(error); }
 };
