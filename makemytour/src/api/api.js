@@ -1,7 +1,7 @@
 import axios from "axios";
 
-// Sabhi flaky configurations ko bypass karke target render link direct connect karo
-const BACKEND_URL = "https://makemytrip-clone-17hl.onrender.com";
+// Industry standard: Cloud par .env se URL uthaega, local par localhost:8080
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export const login = async (email, password) => {
   try {
