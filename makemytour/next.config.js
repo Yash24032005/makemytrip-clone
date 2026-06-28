@@ -21,6 +21,14 @@ const nextConfig = {
         source: '/user/:path*',
         destination: 'https://makemytrip-clone-17hl.onrender.com/user/:path*',
       },
+      {
+        source: '/booking/:path*',
+        destination: 'https://makemytrip-clone-17hl.onrender.com/booking/:path*',
+      },
+      {
+        source: '/admin/:path*',
+        destination: 'https://makemytrip-clone-17hl.onrender.com/admin/:path*',
+      }
     ];
   },
 };
