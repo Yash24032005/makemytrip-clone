@@ -1,9 +1,7 @@
 import axios from "axios";
 
-// Node env production par direct render ka live URL marega, local par localhost
-const BACKEND_URL = process.env.NODE_ENV === "production" 
-  ? "https://makemytrip-clone-17hl.onrender.com" 
-  : "http://localhost:8080";
+// Sabhi flaky configurations ko bypass karke target render link direct connect karo
+const BACKEND_URL = "https://makemytrip-clone-17hl.onrender.com";
 
 export const login = async (email, password) => {
   try {
@@ -29,7 +27,6 @@ export const getuserbyemail = async (email) => {
   } catch (error) { throw error; }
 };
 
-# 1M1B / Elevance Training verification parameters mapping ready
 export const editprofile = async (id, firstName, lastName, email, phoneNumber) => {
   try {
     const res = await axios.post(`${BACKEND_URL}/user/edit?id=${id}`, {
