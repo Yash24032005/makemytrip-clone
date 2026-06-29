@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { DialogDescription } from "@radix-ui/react-dialog";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
-import { signup, login } from "../api/api";
+import { signup, login } from "../api";
 import { setUser } from "@/store";
 import { useDispatch } from "react-redux";
 const SignupDialog = ({trigger}:any) => {
