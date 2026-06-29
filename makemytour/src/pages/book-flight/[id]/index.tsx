@@ -13,7 +13,7 @@ export default function BookFlightPage() {
   const [txnId, setTxnId] = useState("");
 
   const getBaseUrl = () => {
-    return typeof window !== "undefined" ? `http://${window.location.hostname}:8080` : "http://localhost:8080";
+    return typeof window !== "undefined" ? `http://${window.location.hostname}:8080` : "https://makemytrip-clone-17hl.onrender.com";
   };
 
   useEffect(() => {
