@@ -1,0 +1,1 @@
+import React from "react"; export default function RefundTracker({ booking }: any) { return <div className="p-4 border border-red-200 bg-red-50 rounded-xl my-3"><h3>Booking: {booking?.id || "N/A"}</h3><p className="text-red-600 font-bold">Cancellation Status: PENDING REFUND (50% within 24h Policy)</p></div>; }

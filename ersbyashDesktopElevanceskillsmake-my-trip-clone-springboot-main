@@ -1,0 +1,17 @@
+[33mcommit 35fb586d456e67e1dae01d0e7a7aa8094902c04e[m
+Author: Yash Bansal <byash8587@gmail.com>
+Date:   Mon Jun 29 18:56:52 2026 +0530
+
+    fix: resolve broken module resolution imports for centralized api layer
+
+[1mdiff --git a/makemytour/src/pages/index.tsx b/makemytour/src/pages/index.tsx[m
+[1mindex 24c6afa..deea605 100644[m
+[1m--- a/makemytour/src/pages/index.tsx[m
+[1m+++ b/makemytour/src/pages/index.tsx[m
+[36m@@ -1,5 +1,5 @@[m
+ // import { getflight, gethotel } from "../api";[m
+[31m-import { getflight, gethotel } from "../api/api";[m
+[32m+[m[32mimport { getflight, gethotel } from "../api";[m
+ import Loader from "@/components/Loader";[m
+ import { SearchSelect } from "@/components/SearchSelect";[m
+ import { Button } from "@/components/ui/button";[m

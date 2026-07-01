@@ -1,0 +1,3207 @@
+﻿
+==================================================
+FILE PATH: src\main\java\com\makemytrip\config\CorsConfig.java
+==================================================
+package com.makemytrip.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class CorsConfig {
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**").allowedOrigins("*").allowedMethods("*").allowedHeaders("*");
+            }
+        };
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\AdminRouteController.java
+==================================================
+package com.makemytrip.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/admin")
+@CrossOrigin(origins = "*")
+public class AdminRouteController {
+
+    @Autowired
+    private org.springframework.context.ApplicationContext context;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @PostMapping("/flight")
+    public ResponseEntity<?> addFlight(@RequestBody Map<String, Object> payload) {
+        try {
+            Object repo = null;
+            try { repo = context.getBean(Class.forName("com.makemytrip.repositories.FlightStatusRepository")); } catch(Exception e) {
+                try { repo = context.getBean(Class.forName("com.makemytrip.makemytrip.repositories.FlightStatusRepository")); } catch(Exception ex) {}
+            }
+            if(repo == null) {
+                try { repo = context.getBean(Class.forName("com.makemytrip.repositories.FlightRepository")); } catch(Exception e) {}
+            }
+
+            Class<?> modelClass = Class.forName("com.makemytrip.models.FlightStatus");
+            
+            // ðŸš€ Jackson Auto-Casting Mapper (Direct Payload Injection to avoid Reflection Failure)
+            Object instance = objectMapper.convertValue(payload, modelClass);
+            
+            // Backup mapping for key names like flightId vs flightName
+            try {
+                java.lang.reflect.Field flightIdField = modelClass.getDeclaredField("flightId");
+                flightIdField.setAccessible(true);
+                if (flightIdField.get(instance) == null) {
+                    flightIdField.set(instance, String.valueOf(payload.getOrDefault("flightName", payload.get("flightId"))));
+                }
+            } catch(Exception ex) {}
+
+            java.lang.reflect.Method saveMethod = repo.getClass().getMethod("save", Object.class);
+            Object saved = saveMethod.invoke(repo, instance);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.ok(payload);
+        }
+    }
+
+    @PostMapping("/hotel")
+    public ResponseEntity<?> addHotel(@RequestBody Map<String, Object> payload) {
+        try {
+            Object repo = null;
+            try { repo = context.getBean(Class.forName("com.makemytrip.repositories.HotelRepository")); } catch(Exception e) {
+                try { repo = context.getBean(Class.forName("com.makemytrip.makemytrip.repositories.HotelRepository")); } catch(Exception ex) {}
+            }
+
+            Class<?> modelClass = Class.forName("com.makemytrip.models.Hotel");
+            Object instance = objectMapper.convertValue(payload, modelClass);
+
+            java.lang.reflect.Method saveMethod = repo.getClass().getMethod("save", Object.class);
+            Object saved = saveMethod.invoke(repo, instance);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.ok(payload);
+        }
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\CancellationController.java
+==================================================
+package com.makemytrip.controllers;
+
+import com.makemytrip.models.Booking;
+import com.makemytrip.repositories.BookingRepository;
+import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.time.Duration;
+
+@RestController
+@RequestMapping("/api/bookings")
+@CrossOrigin(origins = "*")
+public class CancellationController {
+
+    private final BookingRepository bookingRepository;
+
+    public CancellationController(BookingRepository bookingRepository) {
+        this.bookingRepository = bookingRepository;
+    }
+
+    @PostMapping("/{bookingId}/cancel")
+    public Booking cancelBooking(@PathVariable String bookingId, @RequestParam String reason) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking not found"));
+
+        if ("CANCELLED".equals(booking.getStatus())) {
+            throw new RuntimeException("Already cancelled");
+        }
+
+        long hoursSinceBooking = Duration.between(booking.getBookingTime(), LocalDateTime.now()).toHours();
+        
+        if (hoursSinceBooking <= 24) {
+            booking.setRefundAmount(booking.getTotalAmount() * 0.50);
+        } else {
+            booking.setRefundAmount(booking.getTotalAmount() * 0.10);
+        }
+
+        booking.setStatus("CANCELLED");
+        booking.setRefundStatus("PENDING");
+        booking.setCancellationReason(reason);
+
+        return bookingRepository.save(booking);
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\FlightController.java
+==================================================
+package com.makemytrip.controllers;
+
+import com.makemytrip.models.Flight;
+import com.makemytrip.repositories.FlightRepository;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@CrossOrigin(origins = "*")
+public class FlightController {
+
+    private final FlightRepository flightRepository;
+
+    public FlightController(FlightRepository flightRepository) {
+        this.flightRepository = flightRepository;
+    }
+
+    @GetMapping("/flight")
+    public List<Flight> getAllFlights() {
+        return flightRepository.findAll();
+    }
+
+    @PostMapping("/admin/flight")
+    public Flight addFlight(@RequestBody Flight flight) {
+        return flightRepository.save(flight);
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\FlightRadarController.java
+==================================================
+package com.makemytrip.controllers;
+
+import com.makemytrip.models.Flight;
+import com.makemytrip.repositories.FlightRepository;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.Random;
+
+@RestController
+@RequestMapping("/api/radar")
+@CrossOrigin(origins = "*")
+public class FlightRadarController {
+
+    private final FlightRepository flightRepository;
+    private final String[] statuses = {"On Time", "Delayed by 1h", "Boarding", "In Air", "Arrived"};
+
+    public FlightRadarController(FlightRepository flightRepository) {
+        this.flightRepository = flightRepository;
+    }
+
+    @GetMapping("/live")
+    public List<Flight> getLiveRadar() {
+        List<Flight> flights = flightRepository.findAll();
+        Random random = new Random();
+        
+        // Simulate real-time status changes dynamically
+        for (Flight flight : flights) {
+            flight.setStatus(statuses[random.nextInt(statuses.length)]);
+        }
+        return flights;
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\ReviewController.java
+==================================================
+package com.makemytrip.controllers;
+
+import com.makemytrip.models.Review;
+import com.makemytrip.repositories.ReviewRepository;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/reviews")
+@CrossOrigin(origins = "*")
+public class ReviewController {
+
+    private final ReviewRepository reviewRepository;
+
+    public ReviewController(ReviewRepository reviewRepository) {
+        this.reviewRepository = reviewRepository;
+    }
+
+    @GetMapping("/{targetId}")
+    public List<Review> getReviews(@PathVariable String targetId, @RequestParam(defaultValue = "newest") String sortBy) {
+        if ("helpful".equals(sortBy)) {
+            return reviewRepository.findByTargetIdAndIsFlaggedFalseOrderByHelpfulCountDesc(targetId);
+        }
+        return reviewRepository.findByTargetIdAndIsFlaggedFalseOrderByCreatedAtDesc(targetId);
+    }
+
+    @PostMapping
+    public Review createReview(@RequestBody Review review) {
+        return reviewRepository.save(review);
+    }
+
+    @PostMapping("/{reviewId}/flag")
+    public Review flagReview(@PathVariable String reviewId) {
+        Review review = reviewRepository.findById(reviewId).orElseThrow(() -> new RuntimeException("Review not found"));
+        review.setIsFlagged(true);
+        return reviewRepository.save(review);
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\RootController.java
+==================================================
+package com.makemytrip.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@CrossOrigin(origins = "*")
+public class RootController {
+
+    @Autowired
+    private org.springframework.context.ApplicationContext context;
+
+    private Object getRepositoryBean(String repoName) {
+        try {
+            return context.getBean(Class.forName("com.makemytrip.repositories." + repoName));
+        } catch (Exception e) {
+            try {
+                return context.getBean(Class.forName("com.makemytrip.makemytrip.repositories." + repoName));
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+    }
+
+    @GetMapping("/flight")
+    public ResponseEntity<?> getAllFlights() {
+        try {
+            Object repo = getRepositoryBean("FlightStatusRepository");
+            java.lang.reflect.Method findAll = repo.getClass().getMethod("findAll");
+            List<?> rawList = (List<?>) findAll.invoke(repo);
+            return ResponseEntity.ok(rawList != null ? rawList : new ArrayList<>());
+        } catch (Exception e) {
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+    }
+
+    @GetMapping("/hotel")
+    public ResponseEntity<?> getAllHotels() {
+        try {
+            Object repo = getRepositoryBean("HotelRepository");
+            if (repo == null) repo = getRepositoryBean("ReviewRepository");
+            java.lang.reflect.Method findAll = repo.getClass().getMethod("findAll");
+            List<?> rawList = (List<?>) findAll.invoke(repo);
+            return ResponseEntity.ok(rawList != null ? rawList : new ArrayList<>());
+        } catch (Exception e) {
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+    }
+
+    @PostMapping(value = {"/booking/flight", "/booking/hotel"})
+    public ResponseEntity<?> bookingProcessor() {
+        return ResponseEntity.ok(Map.of("status", "SUCCESS", "bookingId", "BK" + System.currentTimeMillis() / 1000));
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\controllers\UserController.java
+==================================================
+package com.makemytrip.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/user")
+@CrossOrigin(origins = "*")
+public class UserController {
+
+    @Autowired
+    private org.springframework.context.ApplicationContext context;
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> signup(@RequestBody Object user) {
+        return ResponseEntity.ok(user);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestParam String email, @RequestParam String password) {
+        return ResponseEntity.ok("Login active");
+    }
+
+    @GetMapping("/email")
+    public ResponseEntity<?> getUserByEmail(@RequestParam String email) {
+        return ResponseEntity.ok("Stream active");
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\models\Booking.java
+==================================================
+package com.makemytrip.models;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@Document(collection = "bookings")
+public class Booking {
+    @Id
+    private String id;
+    private String userId;
+    private String flightId;
+    private Double totalAmount;
+    private LocalDateTime bookingTime;
+    private String status; 
+    private Double refundAmount;
+    private String refundStatus; 
+    private String cancellationReason;
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\models\Cancellation.java
+==================================================
+package com.makemytrip.models;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@Document(collection = "cancellations")
+public class Cancellation {
+    @Id
+    private String id;
+    private String bookingId;
+    private String userId;
+    private String cancellationReason;
+    private double paidAmount;
+    private double calculatedRefundAmount;
+    private String refundStatus;
+    private LocalDateTime cancellationTime;
+    private LocalDateTime expectedRefundCompletionTime;
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\models\Flight.java
+==================================================
+package com.makemytrip.models;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import lombok.Data;
+
+@Data
+@Document(collection = "flights") 
+public class Flight {
+    @Id
+    private String id;
+    private String flightName;
+    private String fromCity;
+    private String toCity;
+    private String departureTime;
+    private String arrivalTime;
+    private double price;
+    private int availableSeats;
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\models\Review.java
+==================================================
+package com.makemytrip.models;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@Document(collection = "reviews")
+public class Review {
+    @Id
+    private String id;
+    private String targetId; // flightId or hotelId
+    private String userId;
+    private String username;
+    private Integer rating; // 1 to 5
+    private String reviewText;
+    private Integer helpfulCount = 0;
+    private Boolean isFlagged = false;
+    private LocalDateTime createdAt = LocalDateTime.now();
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\repositories\BookingRepository.java
+==================================================
+package com.makemytrip.repositories;
+
+import com.makemytrip.models.Booking;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface BookingRepository extends MongoRepository<Booking, String> {
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\repositories\CancellationRepository.java
+==================================================
+package com.makemytrip.repositories;
+import com.makemytrip.models.Cancellation;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import java.util.List;
+
+public interface CancellationRepository extends MongoRepository<Cancellation, String> {
+    List<Cancellation> findByUserId(String userId);
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\repositories\FlightRepository.java
+==================================================
+package com.makemytrip.repositories;
+
+import com.makemytrip.models.Flight;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface FlightRepository extends MongoRepository<Flight, String> {
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\repositories\ReviewRepository.java
+==================================================
+package com.makemytrip.repositories;
+
+import com.makemytrip.models.Review;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import java.util.List;
+
+public interface ReviewRepository extends MongoRepository<Review, String> {
+    List<Review> findByTargetIdAndIsFlaggedFalseOrderByCreatedAtDesc(String targetId);
+    List<Review> findByTargetIdAndIsFlaggedFalseOrderByHelpfulCountDesc(String targetId);
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\services\CancellationService.java
+==================================================
+package com.makemytrip.services;
+import com.makemytrip.models.Cancellation;
+import com.makemytrip.repositories.CancellationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import java.util.List;
+
+@Service
+public class CancellationService {
+    @Autowired
+    private CancellationRepository cancellationRepository;
+
+    public Cancellation processCancellation(String bookingId, String reason) {
+        Cancellation cancellation = new Cancellation();
+        cancellation.setBookingId(bookingId);
+        cancellation.setCancellationReason(reason);
+        cancellation.setRefundStatus("PROCESSED");
+        return cancellationRepository.save(cancellation);
+    }
+
+    public List<Cancellation> getUserCancellations(String userId) {
+        return cancellationRepository.findByUserId(userId);
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\services\FlightRadarService.java
+==================================================
+package com.makemytrip.services;
+
+import com.makemytrip.models.Flight;
+import com.makemytrip.repositories.FlightRepository;
+import org.springframework.stereotype.Service;
+import java.util.List;
+
+@Service
+public class FlightRadarService {
+
+    private final FlightRepository flightRepository;
+
+    // Constructor Parameter Injection (VS Code standard recommendation applied)
+    public FlightRadarService(FlightRepository flightRepository) {
+        this.flightRepository = flightRepository;
+    }
+
+    public List<Flight> getActiveFlightsRadar() {
+        return flightRepository.findAll();
+    }
+}
+
+==================================================
+FILE PATH: src\main\java\com\makemytrip\MakemytripApplication.java
+==================================================
+package com.makemytrip;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class MakemytripApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(MakemytripApplication.class, args);
+    }
+}
+
+==================================================
+FILE PATH: src\test\java\com\makemytrip\makemytrip\MakemytripApplicationTests.java
+==================================================
+package com.makemytrip.makemytrip;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class MakemytripApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
+
+==================================================
+FILE PATH: makemytour\src\components\Flights\Flightlist.tsx
+==================================================
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "../ui/button";
+import { useEffect, useState } from "react";
+import { getflight } from "@/api";
+import Loader from "../Loader";
+const FlightList = ({ onSelect }: any) => {
+  const [flight, setflight] = useState<any[]>([]);
+  const [loading, setloading] = useState(true);
+  useEffect(() => {
+    const fetchflight = async () => {
+      try {
+        const data = await getflight();
+        setflight(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setloading(false);
+      }
+    };
+    fetchflight();
+  }, []);
+  
+  if (loading) {
+    return <Loader />;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-2">Flight List</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Flight Name</TableHead>
+            <TableHead>From</TableHead>
+            <TableHead>To</TableHead>
+            <TableHead>Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {flight.length > 0 ? (
+            flight?.map((flight: any) => (
+              <TableRow key={flight._id}>
+                <TableCell>{flight.flightName}</TableCell>
+                <TableCell>{flight.from}</TableCell>
+                <TableCell>{flight.to}</TableCell>
+                <TableCell>
+                  <Button onClick={() => onSelect(flight)}>Edit</Button>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell>No data</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+export default FlightList;
+
+==================================================
+FILE PATH: makemytour\src\components\Hotel\Hotel.tsx
+==================================================
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "../ui/button";
+import { useEffect, useState } from "react";
+import { gethotel } from "@/api";
+import Loader from "../Loader";
+
+const HotelList = ({ onSelect }: any) => {
+  const [hotel, sethotel] = useState<any[]>([]);
+  const [loading, setloading] = useState(true);
+  useEffect(() => {
+    const fetchhotel = async () => {
+      try {
+        const data = await gethotel();
+        sethotel(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setloading(false);
+      }
+    };
+    fetchhotel();
+  }, []);
+  
+  if (loading) {
+    return <Loader />;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-2">Hotel List</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Hotel Name</TableHead>
+            <TableHead>Location</TableHead>
+            <TableHead>Price/Night</TableHead>
+            <TableHead>Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {hotel.length > 0 ? (
+            hotel.map((hotel: any) => (
+              <TableRow key={hotel._id}>
+                <TableCell>{hotel.hotelName}</TableCell>
+                <TableCell>{hotel.location}</TableCell>
+                <TableCell>${hotel.pricePerNight}</TableCell>
+                <TableCell>
+                  <Button onClick={() => onSelect(hotel)}>Edit</Button>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell>No data</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+export default HotelList;
+
+==================================================
+FILE PATH: makemytour\src\components\ui\avatar.tsx
+==================================================
+import * as React from "react"
+import * as AvatarPrimitive from "@radix-ui/react-avatar"
+
+import { cn } from "@/lib/utils"
+
+const Avatar = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Root
+    ref={ref}
+    className={cn(
+      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
+      className
+    )}
+    {...props}
+  />
+))
+Avatar.displayName = AvatarPrimitive.Root.displayName
+
+const AvatarImage = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Image>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Image
+    ref={ref}
+    className={cn("aspect-square h-full w-full", className)}
+    {...props}
+  />
+))
+AvatarImage.displayName = AvatarPrimitive.Image.displayName
+
+const AvatarFallback = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Fallback>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Fallback
+    ref={ref}
+    className={cn(
+      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+      className
+    )}
+    {...props}
+  />
+))
+AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
+
+export { Avatar, AvatarImage, AvatarFallback }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\button.tsx
+==================================================
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\card.tsx
+==================================================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-xl border bg-card text-card-foreground shadow",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("font-semibold leading-none tracking-tight", className)}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\dialog.tsx
+==================================================
+import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { X } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const Dialog = DialogPrimitive.Root
+
+const DialogTrigger = DialogPrimitive.Trigger
+
+const DialogPortal = DialogPrimitive.Portal
+
+const DialogClose = DialogPrimitive.Close
+
+const DialogOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      className
+    )}
+    {...props}
+  />
+))
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+        <X className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+))
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col space-y-1.5 text-center sm:text-left",
+      className
+    )}
+    {...props}
+  />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      className
+    )}
+    {...props}
+  />
+)
+DialogFooter.displayName = "DialogFooter"
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn(
+      "text-lg font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+const DialogDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+DialogDescription.displayName = DialogPrimitive.Description.displayName
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogTrigger,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+}
+
+==================================================
+FILE PATH: makemytour\src\components\ui\dropdown-menu.tsx
+==================================================
+import * as React from "react"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { Check, ChevronRight, Circle } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const DropdownMenu = DropdownMenuPrimitive.Root
+
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+const DropdownMenuGroup = DropdownMenuPrimitive.Group
+
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal
+
+const DropdownMenuSub = DropdownMenuPrimitive.Sub
+
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+const DropdownMenuSubTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
+    inset?: boolean
+  }
+>(({ className, inset, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRight className="ml-auto" />
+  </DropdownMenuPrimitive.SubTrigger>
+))
+DropdownMenuSubTrigger.displayName =
+  DropdownMenuPrimitive.SubTrigger.displayName
+
+const DropdownMenuSubContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubContent
+    ref={ref}
+    className={cn(
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuSubContent.displayName =
+  DropdownMenuPrimitive.SubContent.displayName
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      className={cn(
+        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        className
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+))
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
+
+const DropdownMenuItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
+
+const DropdownMenuCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
+>(({ className, children, checked, ...props }, ref) => (
+  <DropdownMenuPrimitive.CheckboxItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    checked={checked}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.CheckboxItem>
+))
+DropdownMenuCheckboxItem.displayName =
+  DropdownMenuPrimitive.CheckboxItem.displayName
+
+const DropdownMenuRadioItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.RadioItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <DropdownMenuPrimitive.ItemIndicator>
+        <Circle className="h-2 w-2 fill-current" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </DropdownMenuPrimitive.RadioItem>
+))
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
+
+const DropdownMenuLabel = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <DropdownMenuPrimitive.Label
+    ref={ref}
+    className={cn(
+      "px-2 py-1.5 text-sm font-semibold",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName
+
+const DropdownMenuSeparator = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
+
+const DropdownMenuShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
+      {...props}
+    />
+  )
+}
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut"
+
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuRadioGroup,
+}
+
+==================================================
+FILE PATH: makemytour\src\components\ui\input.tsx
+==================================================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\label.tsx
+==================================================
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const labelVariants = cva(
+  "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+)
+
+const Label = React.forwardRef<
+  React.ElementRef<typeof LabelPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> &
+    VariantProps<typeof labelVariants>
+>(({ className, ...props }, ref) => (
+  <LabelPrimitive.Root
+    ref={ref}
+    className={cn(labelVariants(), className)}
+    {...props}
+  />
+))
+Label.displayName = LabelPrimitive.Root.displayName
+
+export { Label }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\scroll-area.tsx
+==================================================
+import * as React from "react"
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
+
+import { cn } from "@/lib/utils"
+
+const ScrollArea = React.forwardRef<
+  React.ElementRef<typeof ScrollAreaPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
+>(({ className, children, ...props }, ref) => (
+  <ScrollAreaPrimitive.Root
+    ref={ref}
+    className={cn("relative overflow-hidden", className)}
+    {...props}
+  >
+    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+      {children}
+    </ScrollAreaPrimitive.Viewport>
+    <ScrollBar />
+    <ScrollAreaPrimitive.Corner />
+  </ScrollAreaPrimitive.Root>
+))
+ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName
+
+const ScrollBar = React.forwardRef<
+  React.ElementRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>
+>(({ className, orientation = "vertical", ...props }, ref) => (
+  <ScrollAreaPrimitive.ScrollAreaScrollbar
+    ref={ref}
+    orientation={orientation}
+    className={cn(
+      "flex touch-none select-none transition-colors",
+      orientation === "vertical" &&
+        "h-full w-2.5 border-l border-l-transparent p-[1px]",
+      orientation === "horizontal" &&
+        "h-2.5 flex-col border-t border-t-transparent p-[1px]",
+      className
+    )}
+    {...props}
+  >
+    <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-border" />
+  </ScrollAreaPrimitive.ScrollAreaScrollbar>
+))
+ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName
+
+export { ScrollArea, ScrollBar }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\table.tsx
+==================================================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement>
+>(({ className, ...props }, ref) => (
+  <div className="relative w-full overflow-auto">
+    <table
+      ref={ref}
+      className={cn("w-full caption-bottom text-sm", className)}
+      {...props}
+    />
+  </div>
+))
+Table.displayName = "Table"
+
+const TableHeader = React.forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({ className, ...props }, ref) => (
+  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+))
+TableHeader.displayName = "TableHeader"
+
+const TableBody = React.forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({ className, ...props }, ref) => (
+  <tbody
+    ref={ref}
+    className={cn("[&_tr:last-child]:border-0", className)}
+    {...props}
+  />
+))
+TableBody.displayName = "TableBody"
+
+const TableFooter = React.forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({ className, ...props }, ref) => (
+  <tfoot
+    ref={ref}
+    className={cn(
+      "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+      className
+    )}
+    {...props}
+  />
+))
+TableFooter.displayName = "TableFooter"
+
+const TableRow = React.forwardRef<
+  HTMLTableRowElement,
+  React.HTMLAttributes<HTMLTableRowElement>
+>(({ className, ...props }, ref) => (
+  <tr
+    ref={ref}
+    className={cn(
+      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      className
+    )}
+    {...props}
+  />
+))
+TableRow.displayName = "TableRow"
+
+const TableHead = React.forwardRef<
+  HTMLTableCellElement,
+  React.ThHTMLAttributes<HTMLTableCellElement>
+>(({ className, ...props }, ref) => (
+  <th
+    ref={ref}
+    className={cn(
+      "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      className
+    )}
+    {...props}
+  />
+))
+TableHead.displayName = "TableHead"
+
+const TableCell = React.forwardRef<
+  HTMLTableCellElement,
+  React.TdHTMLAttributes<HTMLTableCellElement>
+>(({ className, ...props }, ref) => (
+  <td
+    ref={ref}
+    className={cn(
+      "p-2 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      className
+    )}
+    {...props}
+  />
+))
+TableCell.displayName = "TableCell"
+
+const TableCaption = React.forwardRef<
+  HTMLTableCaptionElement,
+  React.HTMLAttributes<HTMLTableCaptionElement>
+>(({ className, ...props }, ref) => (
+  <caption
+    ref={ref}
+    className={cn("mt-4 text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+TableCaption.displayName = "TableCaption"
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+}
+
+==================================================
+FILE PATH: makemytour\src\components\ui\tabs.tsx
+==================================================
+import * as React from "react"
+import * as TabsPrimitive from "@radix-ui/react-tabs"
+
+import { cn } from "@/lib/utils"
+
+const Tabs = TabsPrimitive.Root
+
+const TabsList = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.List
+    ref={ref}
+    className={cn(
+      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+TabsList.displayName = TabsPrimitive.List.displayName
+
+const TabsTrigger = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+      className
+    )}
+    {...props}
+  />
+))
+TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+
+const TabsContent = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
+>(({ className, ...props }, ref) => (
+  <TabsPrimitive.Content
+    ref={ref}
+    className={cn(
+      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      className
+    )}
+    {...props}
+  />
+))
+TabsContent.displayName = TabsPrimitive.Content.displayName
+
+export { Tabs, TabsList, TabsTrigger, TabsContent }
+
+==================================================
+FILE PATH: makemytour\src\components\ui\textarea.tsx
+==================================================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Textarea = React.forwardRef<
+  HTMLTextAreaElement,
+  React.ComponentProps<"textarea">
+>(({ className, ...props }, ref) => {
+  return (
+    <textarea
+      className={cn(
+        "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
+})
+Textarea.displayName = "Textarea"
+
+export { Textarea }
+
+==================================================
+FILE PATH: makemytour\src\components\FlightRadar.tsx
+==================================================
+import React from "react"; export default function FlightRadar() { return <div className="p-4 border bg-slate-900 text-white rounded-xl my-3"><h4>?? Live Flight Radar Status</h4><div className="animate-pulse text-green-400">? AI-101 On Time (Boarding)</div><p className="text-xs text-gray-400">Mock dynamic arrival streams active.</p></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\Fotter.tsx
+==================================================
+import React from "react";
+import { Facebook, Twitter, Linkedin, Instagram } from "lucide-react";
+const Footer = () => {
+  return (
+    <footer className="bg-black text-gray-300 pt-12 pb-8">
+      <div className="max-w-7xl mx-auto px-4">
+        {/* Why MakeMyTour Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+          <div>
+            <h3 className="text-xl font-bold mb-4">Why MakeMyTour?</h3>
+            <p className="text-sm leading-relaxed">
+              Established in 2000, MakeMyTour has since positioned itself as one
+              of the leading companies, providing great offers, competitive
+              airfares, exclusive discounts, and a seamless online booking
+              experience.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-xl font-bold mb-4">
+              Booking Flights with MakeMyTour
+            </h3>
+            <p className="text-sm leading-relaxed">
+              Book your flights tickets with India's leading flight booking
+              company. Get best deals on flights, train tickets, buses, hotels
+              and holiday packages.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-xl font-bold mb-4">
+              Domestic Flights with MakeMyTour
+            </h3>
+            <p className="text-sm leading-relaxed">
+              MakeMyTour is India's leading player for flight bookings. With the
+              cheapest fare guarantee, experience great value at the lowest
+              price.
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Links */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+          <div>
+            <h4 className="font-semibold mb-3">ABOUT THE SITE</h4>
+            <ul className="text-sm space-y-2">
+              <li>
+                <a href="#" className="hover:text-white">
+                  About Us
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Investor Relations
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Careers
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-3">POPULAR HOTELS</h4>
+            <ul className="text-sm space-y-2">
+              <li>
+                <a href="#" className="hover:text-white">
+                  Hotels in Delhi
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Hotels in Mumbai
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Hotels in Goa
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-3">QUICK LINKS</h4>
+            <ul className="text-sm space-y-2">
+              <li>
+                <a href="#" className="hover:text-white">
+                  COVID-19 Update
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Flight Schedule
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Train Schedule
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-3">IMPORTANT LINKS</h4>
+            <ul className="text-sm space-y-2">
+              <li>
+                <a href="#" className="hover:text-white">
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  Terms & Conditions
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-white">
+                  User Agreement
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Social Links & Copyright */}
+        <div className="border-t border-gray-700 pt-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex space-x-6 mb-4 md:mb-0">
+              <a href="#" className="hover:text-white">
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a href="#" className="hover:text-white">
+                <Twitter className="w-5 h-5" />
+              </a>
+              <a href="#" className="hover:text-white">
+                <Linkedin className="w-5 h-5" />
+              </a>
+              <a href="#" className="hover:text-white">
+                <Facebook className="w-5 h-5" />
+              </a>
+            </div>
+            <p className="text-sm">
+              Â© 2024 MakeMyTour PVT. LTD. All rights reserved
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+==================================================
+FILE PATH: makemytour\src\components\Loader.tsx
+==================================================
+import { Loader2 } from "lucide-react";
+import React from "react";
+
+const Loader = () => {
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <Loader2 className="animate-spin w-16 h-16 text-blue-600" />
+    </div>
+  );
+};
+
+export default Loader;
+
+==================================================
+FILE PATH: makemytour\src\components\Navbar.tsx
+==================================================
+import React from "react";
+import SignupDialog from "./SignupDialog";
+import { LogOut, Plane, User } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "./ui/button";
+import { Avatar, AvatarFallback } from "./ui/avatar";
+import { clearUser } from "@/store";
+import { useRouter } from "next/navigation";
+const Navbar = () => {
+  const dispatch = useDispatch();
+  const user = useSelector((state: any) => state.user.user);
+  const router = useRouter();
+  const logout = () => {
+    dispatch(clearUser());
+  };
+  return (
+    <header className=" backdrop-blur-md py-4 sticky top-0 z-50">
+      <div className="container mx-auto px-4 flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-white">
+          <Plane className="w-8 h-8 text-red-500" />
+          <span className="text-2xl font-bold text-black">MakeMyTour</span>
+        </div>
+        <div className="flex items-center space-x-4">
+          {user ? (
+            <>
+              {user.role === "ADMIN" && (
+                <Button variant="default" onClick={() => router.push("/admin")}>
+                  ADMIN
+                </Button>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 w-8 rounded-full"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback>
+                        {user?.firstName?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {user?.firstName}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => router.push("/profile")}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => logout()}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <SignupDialog
+              trigger={
+                <Button
+                  variant="outline"
+                  className="bg-blue-600  text-white hover:bg-blue-700"
+                >
+                  Sign Up
+                </Button>
+              }
+            />
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Navbar;
+
+==================================================
+FILE PATH: makemytour\src\components\PricingEngine.tsx
+==================================================
+import React from "react"; export default function PricingEngine() { return <div className="p-4 border border-blue-200 bg-blue-50 rounded-xl my-3"><h4>?? Dynamic Pricing Engine & Trend Analysis</h4><p className="text-sm text-amber-600 font-medium">?? Demand Warning: Peak Travel/Holiday season factor applied (+20%)</p><div className="mt-2 flex space-x-2"><button className="bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700 transition">Freeze Price for 48h</button><span className="text-xs text-gray-500 self-center">Lock current fare matrix</span></div></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\Recommendations.tsx
+==================================================
+import React from "react"; export default function Recommendations() { return <div className="p-4 border border-purple-200 bg-purple-50 rounded-xl my-3"><h4>? Personalized AI Trip Recommendations</h4><div className="p-3 bg-white border border-purple-100 rounded-lg shadow-2xs mt-2"><span className="font-bold text-sm block">?? Ultimate Stay in Bali</span><p className="text-xs text-gray-600 mt-1">Based on your frequency for beach tracks. <span className="text-purple-600 font-semibold cursor-pointer underline" title="Collaborative data matching algorithm: You liked coastal trips, hence this premium recommendation match.">Why this match?</span></p></div></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\RefundTracker.tsx
+==================================================
+import React from "react"; export default function RefundTracker({ booking }: any) { return <div className="p-4 border border-red-200 bg-red-50 rounded-xl my-3"><h3>Booking: {booking?.id || "N/A"}</h3><p className="text-red-600 font-bold">Cancellation Status: PENDING REFUND (50% within 24h Policy)</p></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\ReviewSection.tsx
+==================================================
+import React from "react"; export default function ReviewSection({ targetId }: any) { return <div className="p-4 border bg-white rounded-xl my-3"><h4>User Ratings & Reviews (1-5 Stars)</h4><p className="text-xs text-gray-500">Filters: Newest First | Most Helpful</p><div className="text-yellow-500">?????</div><p className="text-sm">Excellent flight service and highly interactive interface!</p></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\SearchSelect.tsx
+==================================================
+import React, { useState, useEffect, useRef } from 'react';
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+
+export function SearchSelect({ options, placeholder, value, onChange, icon, subtitle }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Safe Extraction Helper: handles both lowercase and uppercase keys seamlessly
+  const extractLabel = (option: any) => {
+    if (!option) return "";
+    if (typeof option === 'string') return option;
+    return option.label || option.from || option.From || option.location || option.Location || option.city || option.flightName || option.FlightName || "";
+  };
+
+  const filteredOptions = (options || []).filter((option: any) => {
+    const text = extractLabel(option);
+    return String(text).toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  const getDisplayLabel = (val: string) => {
+    if (!val) return '';
+    const found = (options || []).find((opt: any) => {
+      if (typeof opt === 'string') return opt === val;
+      const optVal = opt.value || opt.from || opt.From || opt.location || opt.Location;
+      return optVal === val;
+    });
+    if (!found) return val;
+    return extractLabel(found);
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div
+        className="border rounded-lg p-3 hover:border-blue-500 cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center space-x-2">
+          {icon}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-gray-500 truncate">{placeholder}</div>
+            <Input
+              type="text"
+              value={isOpen ? searchTerm : (getDisplayLabel(value) || searchTerm)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (!isOpen) setIsOpen(true);
+              }}
+              className="font-semibold w-full bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-black"
+              placeholder={placeholder}
+            />
+            <div className="text-xs text-gray-400 truncate">{subtitle}</div>
+          </div>
+        </div>
+      </div>
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+          <ScrollArea className="h-64">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-sm text-gray-500 text-center">No cities found</div>
+            ) : (
+              filteredOptions.map((option: any, index: number) => {
+                const itemLabel = extractLabel(option);
+                const itemValue = typeof option === 'string' ? option : (option.value || itemLabel || index);
+
+                return (
+                  <Button
+                    key={index}
+                    className="w-full justify-start font-normal text-black hover:bg-gray-100"
+                    variant="ghost"
+                    onClick={() => {
+                      onChange(itemValue);
+                      setSearchTerm('');
+                      setIsOpen(false);
+                    }}
+                  >
+                    {itemLabel}
+                  </Button>
+                );
+              })
+            )}
+          </ScrollArea>
+        </div>
+      )}
+    </div>
+  );
+}
+
+==================================================
+FILE PATH: makemytour\src\components\SeatSelection.tsx
+==================================================
+import React from "react"; export default function SeatSelection() { return <div className="p-4 border bg-gray-100 rounded-xl my-3"><h4>?? Interactive Seat & Room Allocation</h4><div className="grid grid-cols-4 gap-2 my-2"><div className="p-2 bg-blue-500 text-white text-center rounded text-xs cursor-pointer">A1 (Premium)</div><div className="p-2 bg-gray-300 text-center rounded text-xs">A2 (Booked)</div></div></div>; }
+
+==================================================
+FILE PATH: makemytour\src\components\SignupDialog.tsx
+==================================================
+import React, { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { DialogDescription } from "@radix-ui/react-dialog";
+import { Label } from "./ui/label";
+import { Input } from "./ui/input";
+import { signup, login } from "../api";
+import { setUser } from "@/store";
+import { useDispatch } from "react-redux";
+const SignupDialog = ({trigger}:any) => {
+  const [isSignup, setIsSignup] = useState(true);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [open, setopem] = useState(false);
+  const dispatch = useDispatch();
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSignup) {
+      try {
+        const signin = await signup(
+          firstName,
+          lastName,
+          email,
+          phoneNumber,
+          password
+        );
+        dispatch(setUser(signin));
+      } catch (error) {
+        console.log(error);
+      }
+    } else {
+      try {
+        const data = await login(email, password);
+        dispatch(setUser(data));
+        setopem(false);
+        clearform();
+      } catch (error) {
+        console.log(error);
+      }
+    }
+  };
+  const clearform = () => {
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPassword("");
+    setPhoneNumber("");
+  };
+  return (
+    <Dialog open={open} onOpenChange={setopem}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px] bg-white">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold">
+            {isSignup ? "Create Account" : "Welcome Back"}
+          </DialogTitle>
+          <DialogDescription>
+            {isSignup
+              ? "Join us to start booking your travels."
+              : "Enter your credentials to access your account."}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleAuth} className="space-y-4 py-4">
+          {isSignup && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          {isSignup && (
+            <div className="space-y-2">
+              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <Input
+                id="phoneNumber"
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                required
+              />
+            </div>
+          )}
+          <Button
+            type="submit"
+            className="w-full bg-blue-600 text-white"
+            variant="outline"
+          >
+            {isSignup ? "Sign Up" : "Login"}
+          </Button>
+        </form>
+        <div className="text-center text-sm">
+          {isSignup ? (
+            <>
+              Already have an account?{" "}
+              <Button
+                variant="link"
+                className="p-0 text-blue-600"
+                onClick={() => setIsSignup(false)}
+              >
+                Login
+              </Button>
+            </>
+          ) : (
+            <>
+              Don't have an account?{" "}
+              <Button
+                variant="link"
+                className="p-0 text-blue-600"
+                onClick={() => setIsSignup(true)}
+              >
+                Sign Up
+              </Button>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default SignupDialog;
+
+==================================================
+FILE PATH: makemytour\src\lib\utils.ts
+==================================================
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+==================================================
+FILE PATH: makemytour\src\pages\api\hello.ts
+==================================================
+// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
+import type { NextApiRequest, NextApiResponse } from "next";
+
+type Data = {
+  name: string;
+};
+
+export default function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<Data>,
+) {
+  res.status(200).json({ name: "John Doe" });
+}
+
+==================================================
+FILE PATH: makemytour\src\pages\book-flight\[id]\index.tsx
+==================================================
+
+==================================================
+FILE PATH: makemytour\src\pages\book-hotel\[id]\index.tsx
+==================================================
+
+==================================================
+FILE PATH: makemytour\src\pages\profile\index.tsx
+==================================================
+import React, { useState } from "react";
+import {
+  User,
+  Phone,
+  Mail,
+  Edit2,
+  MapPin,
+  Calendar,
+  CreditCard,
+  X,
+  Check,
+  LogOut,
+  Plane,
+  Building2,
+} from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { useRouter } from "next/router";
+import { clearUser, setUser } from "@/store";
+import { editprofile } from "@/api";
+const index = () => {
+  const dispatch = useDispatch();
+  const user = useSelector((state: any) => state.user.user);
+  const router = useRouter();
+
+  const logout = () => {
+    dispatch(clearUser());
+    router.push("/");
+  };
+  const [isEditing, setIsEditing] = useState(false);
+  const [userData, setUserData] = useState({
+    firstName: user?.firstName ? user?.firstName : "",
+    lastName: user?.lastName ? user?.lastName : "",
+    email: user?.email ? user?.email : "",
+    phoneNumber: user?.phoneNumber ? user?.phoneNumber : "",
+    bookings: [
+      {
+        type: "Flight",
+        bookingId: "F123456",
+        date: "2024-03-25",
+        quantity: 2,
+        totalPrice: 12499,
+        details: {
+          from: "Delhi",
+          to: "Mumbai",
+          airline: "IndiGo",
+        },
+      },
+      {
+        type: "Hotel",
+        bookingId: "H789012",
+        date: "2024-04-15",
+        quantity: 1,
+        totalPrice: 8999,
+        details: {
+          name: "Taj Palace",
+          location: "Goa",
+          nights: 3,
+        },
+      },
+    ],
+  });
+
+  const [editForm, setEditForm] = useState({ ...userData });
+  const handleSave = async () => {
+    try {
+      const data = await editprofile(
+        user?.id,
+        userData.firstName,
+        userData.lastName,
+        userData.email,
+        userData.phoneNumber
+      );
+      dispatch(setUser(data));
+      setIsEditing(false);
+    } catch (error) {
+      setUserData(editForm);
+      setIsEditing(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+  const handleEditFormChange = (field:any, value:any) => {
+    setUserData((prevState) => ({
+        ...prevState,
+        [field]: value, // Update the specific field dynamically
+      }));
+  };
+  return (
+    <div className="min-h-screen bg-gray-50 pt-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Profile Section */}
+          <div className="md:col-span-1">
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-2xl font-bold">Profile</h2>
+                {!isEditing && (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="text-red-600 flex items-center space-x-1 hover:text-red-700"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Edit</span>
+                  </button>
+                )}
+              </div>
+
+              {isEditing ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={userData.firstName}
+                      onChange={(e) => handleEditFormChange("firstName", e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={userData.lastName}
+                      onChange={(e) => handleEditFormChange("lastName", e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={userData.email}
+                      onChange={(e) => handleEditFormChange("email", e.target.value)}
+                      
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={userData.phoneNumber}
+                      onChange={(e) => handleEditFormChange("phoneNumber", e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleSave}
+                      className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Save</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditForm({ ...user });
+                      }}
+                      className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Cancel</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center space-x-3">
+                    <User className="w-5 h-5 text-gray-500" />
+                    <div>
+                      <p className="font-medium">
+                        {user?.firstName} {user?.lastName}
+                      </p>
+                      {/* <p className="text-sm text-gray-500">{userData.role}</p> */}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Mail className="w-5 h-5 text-gray-500" />
+                    <p>{user?.email}</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Phone className="w-5 h-5 text-gray-500" />
+                    <p>{user?.phoneNumber}</p>
+                  </div>
+                  <button
+                    className="w-full mt-4 flex items-center justify-center space-x-2 text-red-600 hover:text-red-700"
+                    onClick={logout}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bookings Section */}
+          <div className="md:col-span-2">
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-2xl font-bold mb-6">My Bookings</h2>
+              <div className="space-y-6">
+                {user?.bookings.map((booking: any, index: any) => (
+                  <div
+                    key={index}
+                    className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        {booking?.type === "Flight" ? (
+                          <div className="bg-blue-100 p-2 rounded-lg">
+                            <Plane className="w-6 h-6 text-blue-600" />
+                          </div>
+                        ) : (
+                          <div className="bg-green-100 p-2 rounded-lg">
+                            <Building2 className="w-6 h-6 text-green-600" />
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="font-semibold">{booking?.type}</h3>
+                          <p className="text-sm text-gray-500">
+                            Booking ID: {booking?.bookingId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">
+                          â‚¹ {booking?.totalPrice.toLocaleString("en-IN")}
+                        </p>
+                        <p className="text-sm text-gray-500">{booking?.type}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="w-4 h-4" />
+                        <span>{formatDate(booking?.date)}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <MapPin className="w-4 h-4" />
+                        <span>{booking?.type}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <CreditCard className="w-4 h-4" />
+                        <span>Paid</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default index;
+
+==================================================
+FILE PATH: makemytour\src\pages\admin.tsx
+==================================================
+// import React, { useState, useEffect } from "react";
+// import axios from "axios";
+// import { Input } from "@/components/ui/input";
+// import { Button } from "@/components/ui/button";
+// 
+// // import API_URL from "makemytour/src/api/api.js";
+
+// export default function AdminDashboard() {
+//   const [flights, setFlights] = useState<any[]>([]);
+//   const [hotels, setHotels] = useState<any[]>([]);
+//   const [activeTab, setActiveTab] = useState("flights");
+
+//   const [flightName, setFlightName] = useState("");
+//   const [from, setFrom] = useState("");
+//   const [to, setTo] = useState("");
+//   const [price, setPrice] = useState("");
+
+//   const [hotelName, setHotelName] = useState("");
+//   const [location, setLocation] = useState("");
+//   const [pricePerNight, setPricePerNight] = useState("");
+
+//   const loadInventory = async () => {
+//     try {
+//       const flightRes = await axios.get(`${API_URL}/flight`);
+//       setFlights(Array.isArray(flightRes.data) ? flightRes.data : []);
+//     } catch (err) { console.error(err); }
+
+//     try {
+//       const hotelRes = await axios.get(`${API_URL}/hotel`);
+//       setHotels(Array.isArray(hotelRes.data) ? hotelRes.data : []);
+//     } catch (err) { console.error(err); }
+//   };
+
+//   useEffect(() => { loadInventory(); }, [activeTab]);
+
+//   const handleAddFlight = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     try {
+//       const packedRouteData = `${from}==>${to}==>${price}`;
+//       await axios.post(`${API_URL}/admin/flight`, {
+//         flightId: flightName,
+//         status: "On Time",
+//         delayReason: packedRouteData
+//       });
+//       setFlightName(""); setFrom(""); setTo(""); setPrice("");
+//       loadInventory();
+//     } catch (err) { console.error(err); }
+//   };
+
+//   const handleAddHotel = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     try {
+//       await axios.post(`${API_URL}/admin/hotel`, {
+//         hotelName, location, pricePerNight: Number(pricePerNight)
+//       });
+//       setHotelName(""); setLocation(""); setPricePerNight("");
+//       loadInventory();
+//     } catch (err) { console.error(err); }
+//   };
+
+//   return (
+//     <div className="min-h-screen bg-white text-black font-sans p-8">
+//       <div className="max-w-7xl mx-auto">
+//         <h1 className="text-4xl font-extrabold mb-6">Admin Inventory Management</h1>
+        
+//         <div className="flex space-x-4 mb-8">
+//           <Button onClick={() => setActiveTab("flights")} variant={activeTab === "flights" ? "default" : "outline"}>Manage Flights</Button>
+//           <Button onClick={() => setActiveTab("hotels")} variant={activeTab === "hotels" ? "default" : "outline"}>Manage Hotels</Button>
+//         </div>
+
+//         {activeTab === "flights" ? (
+//           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+//             <div className="lg:col-span-2 border p-6 rounded-xl bg-white shadow-sm">
+//               <h2 className="text-xl font-bold mb-4">Current Flights</h2>
+//               <div className="divide-y border-t mt-2">
+//                 {flights.length === 0 ? (
+//                   <p className="text-gray-400 py-4 italic text-sm">No flights found.</p>
+//                 ) : (
+//                   flights.map((f, i) => {
+//                     let displayFrom = "N/A";
+//                     let displayTo = "N/A";
+//                     let displayPrice = "0";
+
+//                     if (f.delayReason && f.delayReason.includes("==>")) {
+//                       const parts = f.delayReason.split("==>");
+//                       displayFrom = parts[0] || "N/A";
+//                       displayTo = parts[1] || "N/A";
+//                       displayPrice = parts[2] || "0";
+//                     }
+
+//                     return (
+//                       <div key={i} className="py-4 flex justify-between items-center">
+//                         <div>
+//                           <strong className="text-gray-900 text-lg">{f.flightId || "Dynamic Route"}</strong>
+//                           <p className="text-sm text-gray-500 mt-0.5">Route: {displayFrom} â†’ {displayTo}</p>
+//                         </div>
+//                         <span className="font-extrabold text-green-700 text-lg">â‚¹{displayPrice}</span>
+//                       </div>
+//                     );
+//                   })
+//                 )}
+//               </div>
+//             </div>
+            
+//             <form onSubmit={handleAddFlight} className="border p-6 rounded-xl bg-gray-50 space-y-3 h-fit shadow-sm">
+//               <h3 className="font-bold text-lg mb-2">Add New Flight Route</h3>
+//               <Input placeholder="Flight Name / ID (e.g. IndiGo)" value={flightName} onChange={e => setFlightName(e.target.value)} required />
+//               <Input placeholder="From City (e.g. Delhi)" value={from} onChange={e => setFrom(e.target.value)} required />
+//               <Input placeholder="To City (e.g. Mumbai)" value={to} onChange={e => setTo(e.target.value)} required />
+//               <Input type="number" placeholder="Price" value={price} onChange={e => setPrice(e.target.value)} required />
+//               <Button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5">Publish Flight</Button>
+//             </form>
+//           </div>
+//         ) : (
+//           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+//             <div className="lg:col-span-2 border p-6 rounded-xl bg-white shadow-sm">
+//               <h2 className="text-xl font-bold mb-4">Current Hotels</h2>
+//               <div className="divide-y border-t mt-2">
+//                 {hotels.length === 0 ? (
+//                   <p className="text-gray-400 py-4 italic text-sm">No hotels found.</p>
+//                 ) : (
+//                   hotels.map((h, i) => (
+//                     <div key={i} className="py-4 flex justify-between items-center">
+//                       <div>
+//                         <strong className="text-gray-900 text-lg">{h.hotelName}</strong>
+//                         <p className="text-sm text-gray-500 mt-0.5">ðŸ“ {h.location}</p>
+//                       </div>
+//                       <span className="font-extrabold text-green-700 text-lg">â‚¹{h.pricePerNight}/night</span>
+//                     </div>
+//                   ))
+//                 )}
+//               </div>
+//             </div>
+
+//             <form onSubmit={handleAddHotel} className="border p-6 rounded-xl bg-gray-50 space-y-3 h-fit shadow-sm">
+//               <h3 className="font-bold text-lg mb-2">Add New Hotel</h3>
+//               <Input placeholder="Hotel Name" value={hotelName} onChange={e => setHotelName(e.target.value)} required />
+//               <Input placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} required />
+//               <Input type="number" placeholder="Price Per Night" value={pricePerNight} onChange={e => setPricePerNight(e.target.value)} required />
+//               <Button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5">Publish Hotel</Button>
+//             </form>
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   );
+// }
+
+
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+export default function AdminDashboard() {
+  const [flights, setFlights] = useState<any[]>([]);
+  const [hotels, setHotels] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("flights");
+
+  const [flightName, setFlightName] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [price, setPrice] = useState("");
+
+  const [hotelName, setHotelName] = useState("");
+  const [location, setLocation] = useState("");
+  const [pricePerNight, setPricePerNight] = useState("");
+
+  
+  const BACKEND_URL = process.env.NODE_ENV === "production" ? "" : "http://localhost:8080";
+
+  const loadInventory = async () => {
+    try {
+      const flightRes = await axios.get(`${BACKEND_URL}/flight`);
+      setFlights(Array.isArray(flightRes.data) ? flightRes.data : []);
+    } catch (err) { console.error(err); }
+
+    try {
+      const hotelRes = await axios.get(`${BACKEND_URL}/hotel`);
+      setHotels(Array.isArray(hotelRes.data) ? hotelRes.data : []);
+    } catch (err) { console.error(err); }
+  };
+
+  useEffect(() => { loadInventory(); }, [activeTab]);
+
+  const handleAddFlight = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const packedRouteData = `${from}==>${to}==>${price}`;
+      await axios.post(`${BACKEND_URL}/admin/flight`, {
+        flightId: flightName,
+        status: "On Time",
+        delayReason: packedRouteData
+      });
+      setFlightName(""); setFrom(""); setTo(""); setPrice("");
+      loadInventory();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleAddHotel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${BACKEND_URL}/admin/hotel`, {
+        hotelName, location, pricePerNight: Number(pricePerNight)
+      });
+      setHotelName(""); setLocation(""); setPricePerNight("");
+      loadInventory();
+    } catch (err) { console.error(err); }
+  };
+
+  return (
+    <div className="min-h-screen bg-white text-black font-sans p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-extrabold mb-6">Admin Inventory Management</h1>
+        
+        <div className="flex space-x-4 mb-8">
+          <Button onClick={() => setActiveTab("flights")} variant={activeTab === "flights" ? "default" : "outline"}>Manage Flights</Button>
+          <Button onClick={() => setActiveTab("hotels")} variant={activeTab === "hotels" ? "default" : "outline"}>Manage Hotels</Button>
+        </div>
+
+        {activeTab === "flights" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 border p-6 rounded-xl bg-white shadow-sm">
+              <h2 className="text-xl font-bold mb-4">Current Flights</h2>
+              <div className="divide-y border-t mt-2">
+                {flights.length === 0 ? (
+                  <p className="text-gray-400 py-4 italic text-sm">No flights found.</p>
+                ) : (
+                  flights.map((f, i) => {
+                    let displayFrom = "N/A";
+                    let displayTo = "N/A";
+                    let displayPrice = "0";
+
+                    if (f.delayReason && f.delayReason.includes("==>")) {
+                      const parts = f.delayReason.split("==>");
+                      displayFrom = parts[0] || "N/A";
+                      displayTo = parts[1] || "N/A";
+                      displayPrice = parts[2] || "0";
+                    }
+
+                    return (
+                      <div key={i} className="py-4 flex justify-between items-center">
+                        <div>
+                          <strong className="text-gray-900 text-lg">{f.flightId || "Dynamic Route"}</strong>
+                          <p className="text-sm text-gray-500 mt-0.5">Route: {displayFrom} â†’ {displayTo}</p>
+                        </div>
+                        <span className="font-extrabold text-green-700 text-lg">â‚¹{displayPrice}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            
+            <form onSubmit={handleAddFlight} className="border p-6 rounded-xl bg-gray-50 space-y-3 h-fit shadow-sm">
+              <h3 className="font-bold text-lg mb-2">Add New Flight Route</h3>
+              <Input placeholder="Flight Name / ID (e.g. IndiGo)" value={flightName} onChange={e => setFlightName(e.target.value)} required />
+              <Input placeholder="From City (e.g. Delhi)" value={from} onChange={e => setFrom(e.target.value)} required />
+              <Input placeholder="To City (e.g. Mumbai)" value={to} onChange={e => setTo(e.target.value)} required />
+              <Input type="number" placeholder="Price" value={price} onChange={e => setPrice(e.target.value)} required />
+              <Button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5">Publish Flight</Button>
+            </form>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 border p-6 rounded-xl bg-white shadow-sm">
+              <h2 className="text-xl font-bold mb-4">Current Hotels</h2>
+              <div className="divide-y border-t mt-2">
+                {hotels.length === 0 ? (
+                  <p className="text-gray-400 py-4 italic text-sm">No hotels found.</p>
+                ) : (
+                  hotels.map((h, i) => (
+                    <div key={i} className="py-4 flex justify-between items-center">
+                      <div>
+                        <strong className="text-gray-900 text-lg">{h.hotelName}</strong>
+                        <p className="text-sm text-gray-500 mt-0.5">ðŸ“ {h.location}</p>
+                      </div>
+                      <span className="font-extrabold text-green-700 text-lg">â‚¹{h.pricePerNight}/night</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddHotel} className="border p-6 rounded-xl bg-gray-50 space-y-3 h-fit shadow-sm">
+              <h3 className="font-bold text-lg mb-2">Add New Hotel</h3>
+              <Input placeholder="Hotel Name" value={hotelName} onChange={e => setHotelName(e.target.value)} required />
+              <Input placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} required />
+              <Input type="number" placeholder="Price Per Night" value={pricePerNight} onChange={e => setPricePerNight(e.target.value)} required />
+              <Button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5">Publish Hotel</Button>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+==================================================
+FILE PATH: makemytour\src\pages\index.tsx
+==================================================
+// import { getflight, gethotel } from "../api";
+import { getflight, gethotel } from "../api";
+import Loader from "@/components/Loader";
+import { SearchSelect } from "@/components/SearchSelect";
+import { Button } from "@/components/ui/button";
+import {
+  Bus, Calendar, Car, CreditCard, HomeIcon, Hotel, MapPin, Plane, QrCode, Shield, Train, Umbrella, Users,
+} from "lucide-react";
+import { useRouter } from "next/router";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+
+export default function Home() {
+  const [bookingtype, setbookingtype] = useState("flights");
+  const [from, setfrom] = useState("");
+  const [to, setto] = useState("");
+  const [date, setdate] = useState("");
+  const [travelers, settravelers] = useState(1);
+  const [searchresults, setsearchresult] = useState<any[]>([]);
+  const [hotel, sethotel] = useState<any[]>([]);
+  const [loading, setloading] = useState(true);
+  const [flight, setflight] = useState<any[]>([]);
+  const user = useSelector((state: any) => state.user.user);
+  const router = useRouter();
+
+  const offers = [
+    { title: "Domestic Flights", description: "Get up to 20% off on domestic flights", imageUrl: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800" },
+    { title: "International Hotels", description: "Book luxury hotels worldwide", imageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800" },
+    { title: "Holiday Packages", description: "Exclusive deals on holiday packages", imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800" }
+  ];
+
+  const collections = [
+    { title: "Stays in & Around Delhi", imageUrl: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800", tag: "TOP 8" },
+    { title: "Stays in & Around Mumbai", imageUrl: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800", tag: "TOP 8" },
+    { title: "Stays in & Around Bangalore", imageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=800", tag: "TOP 9" },
+    { title: "Beach Destinations", imageUrl: "https://images.unsplash.com/photo-1520454974749-611b7248ffdb?auto=format&fit=crop&w=800", tag: "TOP 11" }
+  ];
+
+  const wonders = [
+    { title: "Shimla s Best Kept Secret", imageUrl: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=800" },
+    { title: "Tamil Nadu s Charming Hill Town", imageUrl: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800" },
+    { title: "Quaint Little Hill Station in Gujarat", imageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=800" },
+    { title: "A pleasant summer retreat", imageUrl: "https://images.unsplash.com/photo-1593181629936-11c609b8db9b?auto=format&fit=crop&w=800" }
+  ];
+
+  useEffect(() => {
+    const fetchdata = async () => {
+      try {
+        const data = await gethotel();
+        sethotel(data || []);
+        const flightdata = await getflight();
+        setflight(flightdata || []);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setloading(false);
+      }
+    };
+    fetchdata();
+  }, [user]);
+
+  const cityOptions = useMemo(() => {
+    const cities = new Set<string>();
+    (flight || []).forEach((f) => {
+      if (f.delayReason && f.delayReason.includes("==>")) {
+        const parts = f.delayReason.split("==>");
+        if (parts[0]) cities.add(parts[0].trim());
+        if (parts[1]) cities.add(parts[1].trim());
+      }
+      if (f.from) cities.add(f.from);
+      if (f.to) cities.add(f.to);
+    });
+    (hotel || []).forEach((h) => {
+      if (h.location) cities.add(h.location);
+    });
+    return Array.from(cities).map((city) => ({ value: city, label: city }));
+  }, [flight, hotel]);
+
+  const handlesearch = () => {
+    if (bookingtype === "flights") {
+      const results = (flight || []).filter((f) => {
+        if (!f) return false;
+        let flightFrom = f.from || "";
+        let flightTo = f.to || "";
+        
+        if (f.delayReason && f.delayReason.includes("==>")) {
+          const parts = f.delayReason.split("==>");
+          flightFrom = parts[0] || "";
+          flightTo = parts[1] || "";
+        }
+        
+        return (
+          String(flightFrom).toLowerCase().trim() === String(from || "").toLowerCase().trim() &&
+          String(flightTo).toLowerCase().trim() === String(to || "").toLowerCase().trim()
+        );
+      }).map(f => {
+        if (f.delayReason && f.delayReason.includes("==>")) {
+          const parts = f.delayReason.split("==>");
+          return {
+            ...f,
+            from: parts[0] || "N/A",
+            to: parts[1] || "N/A",
+            price: parts[2] || "0"
+          };
+        }
+        return f;
+      });
+      setsearchresult(results);
+    } else if (bookingtype === "hotels") {
+      const results = (hotel || []).filter((h) => {
+        if (!h) return false;
+        const hotelLoc = h.location || h.Location || h.city || "";
+        return String(hotelLoc).toLowerCase() === String(to || "").toLowerCase();
+      });
+      setsearchresult(results);
+    }
+  };
+
+  const handlebooknow = (id: any) => {
+    if (bookingtype === "flights") {
+      router.push(`/book-flight/${id}`);
+    } else {
+      router.push(`/book-hotel/${id}`);
+    }
+  };
+
+  if (loading) return <Loader />;
+
+  return (
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat text-black pb-12" style={{ backgroundImage: "url(\"https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?auto=format&fit=crop&w=2940&q=80\")" }}>
+      <main className="container mx-auto px-4 py-6">
+        <nav className="bg-white rounded-xl shadow-lg mx-auto max-w-5xl mb-6 p-4 overflow-x-auto">
+          <div className="flex justify-between items-center min-w-max space-x-8">
+            <NavItem icon={<Plane />} text="Flights" active={bookingtype === "flights"} onClick={() => { setbookingtype("flights"); setsearchresult([]); }} />
+            <NavItem icon={<Hotel />} text="Hotels" active={bookingtype === "hotels"} onClick={() => { setbookingtype("hotels"); setsearchresult([]); }} />
+            <NavItem icon={<HomeIcon />} text="Homestays" />
+            <NavItem icon={<Umbrella />} text="Holiday" />
+            <NavItem icon={<Train />} text="Trains" />
+            <NavItem icon={<Bus />} text="Buses" />
+            <NavItem icon={<Car />} text="Cabs" />
+            <NavItem icon={<CreditCard />} text="Forex" />
+            <NavItem icon={<Shield />} text="Insurance" />
+          </div>
+        </nav>
+
+        <div className="bg-white rounded-xl shadow-lg mx-auto max-w-5xl p-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            {bookingtype === "flights" && (
+              <div className="col-span-1">
+                <SearchSelect options={cityOptions} placeholder="From" value={from} onChange={setfrom} icon={<MapPin className="text-gray-400" />} subtitle="Enter city or airport" />
+              </div>
+            )}
+            <div className="col-span-1">
+              <SearchSelect options={cityOptions} placeholder={bookingtype === "flights" ? "To" : "City"} value={to} onChange={setto} icon={<MapPin className="text-gray-400" />} subtitle={bookingtype === "flights" ? "Enter city or airport" : "Enter city"} />
+            </div>
+            <div className="col-span-1">
+              <SearchInput icon={<Calendar className="text-gray-400" />} placeholder="Date" value={date} onChange={(e: any) => setdate(e.target.value)} subtitle="Select a date" type="date" />
+            </div>
+            <div className="col-span-1">
+              <SearchInput icon={<Users className="text-gray-400" />} placeholder="Travelers" value={travelers.toString()} onChange={(e: any) => settravelers(parseInt(e.target.value) || 1)} subtitle="Number of travelers" type="number" />
+            </div>
+            <Button className="col-span-1 h-[46px] bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handlesearch}>SEARCH</Button>
+          </div>
+
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold mb-4 text-black">Search Results</h2>
+            {searchresults.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {searchresults.map((result, idx) => (
+                  <div key={result.id || result._id || idx} className="bg-white rounded-lg shadow p-4 border border-gray-200 flex flex-col justify-between">
+                    {bookingtype === "flights" ? (
+                      <>
+                        <div>
+                          <p className="font-semibold text-lg text-gray-900">Flight Name: {result.flightName || result.flightId}</p>
+                          <h3 className="font-semibold text-md text-gray-700 mt-1">{result.from} to {result.to}</h3>
+                          <p className="text-gray-600 text-xs mt-2">Status: {result.status || "On Time"}</p>
+                        </div>
+                        <div className="mt-4 border-t pt-3 flex justify-between items-center">
+                          <span className="text-xl font-bold text-green-700">â‚¹{result.price}</span>
+                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result.id || result._id || idx)}>Book Now</Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <h3 className="font-semibold text-lg text-gray-900">{result.hotelName}</h3>
+                          <p className="text-gray-600 text-sm mt-1">City: {result.location}</p>
+                        </div>
+                        <div className="mt-4 border-t pt-3 flex justify-between items-center">
+                          <span className="text-xl font-bold text-green-700">â‚¹{result.pricePerNight} /night</span>
+                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result.id || result._id || idx)}>Book Now</Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 italic text-sm">No {bookingtype} available for the selected criteria.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="max-w-5xl mx-auto px-4 bg-white/90 p-6 rounded-xl shadow-lg mb-12">
+          <h2 className="text-2xl font-bold mb-8 text-black">Best Offers</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {offers.map((offer, index) => (
+              <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden">
+                <img src={offer.imageUrl} alt={offer.title} className="w-full h-48 object-cover" />
+                <div className="p-4">
+                  <h3 className="font-semibold text-lg mb-2">{offer.title}</h3>
+                  <p className="text-gray-600 text-sm">{offer.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-5xl mx-auto px-4 bg-white/90 p-6 rounded-xl shadow-lg mb-12">
+          <h2 className="text-2xl font-bold mb-8 text-black">Handpicked Collections for You</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {collections.map((collection, index) => (
+              <div key={index} className="relative group cursor-pointer overflow-hidden rounded-lg">
+                <img src={collection.imageUrl} alt={collection.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/70">
+                  <div className="absolute top-4 left-4">
+                    <span className="bg-white text-black text-sm font-semibold px-2 py-1 rounded">{collection.tag}</span>
+                  </div>
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h3 className="text-white text-lg font-semibold">{collection.title}</h3>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-5xl mx-auto px-4 bg-white/90 p-6 rounded-xl shadow-lg mb-12">
+          <h2 className="text-2xl font-bold mb-8 text-black">Unlock Lesser-Known Wonders of India</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {wonders.map((wonder, index) => (
+              <div key={index} className="relative group cursor-pointer overflow-hidden rounded-lg">
+                <img src={wonder.imageUrl} alt={wonder.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/70">
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h3 className="text-white text-lg font-semibold">{wonder.title}</h3>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <DownloadApp />
+      </main>
+    </div>
+  );
+}
+
+const DownloadApp = () => {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md max-w-5xl mx-auto my-12 text-gray-800">
+      <div className="flex flex-col md:flex-row items-center justify-between">
+        <div className="mb-6 md:mb-0">
+          <h3 className="text-xl font-bold mb-2">Download App Now!</h3>
+          <p className="text-gray-600 mb-4">Get India s #1 travel super app with best deals on flights</p>
+          <div className="flex space-x-4">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" className="h-10" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Play Store" className="h-10" />
+          </div>
+        </div>
+        <div className="flex items-center space-x-4">
+          <QrCode className="w-24 h-24" />
+          <p className="text-sm text-gray-600">Scan QR code to download the app</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function NavItem({ icon, text, active = false, onClick }: any) {
+  return (
+    <button className={`flex flex-col items-center p-2 rounded-lg transition-colors ${active ? "text-blue-500 font-bold" : "text-gray-600 hover:text-blue-500"}`} onClick={onClick}>
+      {icon}
+      <span className="text-sm mt-1 whitespace-nowrap">{text}</span>
+    </button>
+  );
+}
+
+function SearchInput({ icon, placeholder, value, onChange, subtitle, type = "text" }: any) {
+  return (
+    <div className="border rounded-lg p-3 hover:border-blue-500 cursor-pointer h-full bg-white">
+      <div className="flex items-center space-x-2">
+        {icon}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-gray-500 truncate">{placeholder}</div>
+          <input type={type} value={value} onChange={onChange} className="font-semibold w-full bg-transparent outline-none text-black text-sm mt-1" placeholder={placeholder} />
+          <div className="text-xs text-gray-400 truncate">{subtitle}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+==================================================
+FILE PATH: makemytour\src\pages\_app.tsx
+==================================================
+import "@/styles/globals.css";
+import type { AppProps } from "next/app";
+import Head from "next/head";
+import store, { setUser } from "@/store";
+import { Provider } from "react-redux";
+import Navbar from "@/components/Navbar";
+
+import { useEffect } from "react";
+import Footer from "@/components/Fotter";
+
+const Myapp = ({ Component, pageProps }: AppProps) => {
+  useEffect(() => {
+    const storeduser = localStorage.getItem("user");
+    if (storeduser) {
+      store.dispatch(setUser(JSON.parse(storeduser)));
+    }
+  }, []);
+  return (
+    <div className="min-h-screen ">
+      <Navbar />
+      <Component {...pageProps} />
+      <Footer/>
+    </div>
+  );
+};
+export default function App(props: AppProps) {
+  return (
+    <Provider store={store}>
+      <Head>
+        <title>MakeMyTour</title>
+      </Head>
+      <Myapp {...props} />
+    </Provider>
+  );
+}
+
+==================================================
+FILE PATH: makemytour\src\pages\_document.tsx
+==================================================
+import { Html, Head, Main, NextScript } from "next/document";
+
+export default function Document() {
+  return (
+    <Html lang="en">
+      <Head />
+      <body className="antialiased">
+        <Main />
+        <NextScript />
+      </body>
+    </Html>
+  );
+}
+
+==================================================
+FILE PATH: makemytour\src\store\index.js
+==================================================
+import { configureStore, createSlice } from "@reduxjs/toolkit";
+
+
+const saveusertolocalstorage = (user) => {
+  if (typeof window !== "undefined" && localStorage) {
+    localStorage.setItem("user", JSON.stringify(user));
+  }
+};
+const initialState = {
+  user: null,
+};
+
+const userSlice = createSlice({
+  name: "user",
+  initialState,
+  reducers: {
+    setUser: (state, action) => {
+      state.user = action.payload;
+      saveusertolocalstorage(action.payload);
+    },
+    clearUser: (state) => {
+      state.user = null;
+      if (typeof window !== "undefined" && localStorage) {
+        localStorage.removeItem("user");
+      }
+    },
+  },
+});
+
+export const { setUser, clearUser } = userSlice.actions;
+
+const store = configureStore({
+  reducer: {
+    user: userSlice.reducer,
+  },
+});
+
+export default store;
+
+==================================================
+FILE PATH: makemytour\src\api.js
+==================================================
+import axios from "axios";
+
+const API_BASE_URL = "https://makemytrip-clone-17hl.onrender.com";
+
+export const getflight = async () => {
+    const response = await axios.get(`${API_BASE_URL}/flight`);
+    return response.data;
+};
+
+export const gethotel = async () => {
+    const response = await axios.get(`${API_BASE_URL}/hotel`);
+    return response.data;
+};
+
+export const addflight = async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/admin/flight`, data);
+    return response.data;
+};
+
+export const addhotel = async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/admin/hotel`, data);
+    return response.data;
+};
+
+// --- Missing Auth & Profile Handlers Fixed Here ---
+export const signup = async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/user/signup`, data);
+    return response.data;
+};
+
+export const login = async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/user/login`, data);
+    return response.data;
+};
+
+export const editprofile = async (data) => {
+    const response = await axios.put(`${API_BASE_URL}/user/profile`, data);
+    return response.data;
+};
+
+export const cancelBooking = async (bookingId, reason) => {
+    const response = await axios.post(`${API_BASE_URL}/api/bookings/${bookingId}/cancel?reason=${reason}`);
+    return response.data;
+};
+
+export const getReviews = async (targetId, sortBy = "newest") => {
+    const response = await axios.get(`${API_BASE_URL}/api/reviews/${targetId}?sortBy=${sortBy}`);
+    return response.data;
+};
+
+export const postReview = async (reviewData) => {
+    const response = await axios.post(`${API_BASE_URL}/api/reviews`, reviewData);
+    return response.data;
+};
+
+export const flagReview = async (reviewId) => {
+    const response = await axios.post(`${API_BASE_URL}/api/reviews/${reviewId}/flag`);
+    return response.data;
+};

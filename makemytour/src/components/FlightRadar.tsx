@@ -1,0 +1,1 @@
+import React from "react"; export default function FlightRadar() { return <div className="p-4 border bg-slate-900 text-white rounded-xl my-3"><h4>?? Live Flight Radar Status</h4><div className="animate-pulse text-green-400">? AI-101 On Time (Boarding)</div><p className="text-xs text-gray-400">Mock dynamic arrival streams active.</p></div>; }

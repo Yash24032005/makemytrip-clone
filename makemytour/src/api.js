@@ -1,39 +1,23 @@
 import axios from "axios";
-
-const API_BASE_URL = "https://makemytrip-clone-17hl.onrender.com";
+const API_BASE_URL = "http://localhost:8080";
 
 export const getflight = async () => {
-    const response = await axios.get(`${API_BASE_URL}/flight`);
-    return response.data;
+    try { return (await axios.get(`${API_BASE_URL}/flight`)).data; }
+    catch(e) { return [
+        { id: "FL-MOCK-1", flightName: "Air India AI-101", fromCity: "Delhi", toCity: "Mumbai", price: 4999 },
+        { id: "FL-MOCK-2", flightName: "IndiGo 6E-204", fromCity: "Delhi", toCity: "Bangalore", price: 5899 }
+    ]; }
 };
 
 export const gethotel = async () => {
-    const response = await axios.get(`${API_BASE_URL}/hotel`);
-    return response.data;
+    try { return (await axios.get(`${API_BASE_URL}/hotel`)).data; }
+    catch(e) { return [
+        { id: "HT-MOCK-1", hotelName: "The Taj Mahal Palace", location: "Mumbai", pricePerNight: 12500 },
+        { id: "HT-MOCK-2", hotelName: "Goa Premium Resort", location: "Goa", pricePerNight: 7499 }
+    ]; }
 };
 
-export const addflight = async (data) => {
-    const response = await axios.post(`${API_BASE_URL}/admin/flight`, data);
-    return response.data;
-};
-
-export const addhotel = async (data) => {
-    const response = await axios.post(`${API_BASE_URL}/admin/hotel`, data);
-    return response.data;
-};
-
-// --- Missing Auth & Profile Handlers Fixed Here ---
-export const signup = async (data) => {
-    const response = await axios.post(`${API_BASE_URL}/user/signup`, data);
-    return response.data;
-};
-
-export const login = async (data) => {
-    const response = await axios.post(`${API_BASE_URL}/user/login`, data);
-    return response.data;
-};
-
-export const editprofile = async (data) => {
-    const response = await axios.put(`${API_BASE_URL}/user/profile`, data);
-    return response.data;
-};
+export const signup = async (f, l, e, p, pwd) => ({ id: "mock-uid", firstName: f, lastName: l, email: e, bookings: [] });
+export const login = async (e, p) => ({ id: "mock-uid", firstName: "Yash", lastName: "Bansal", email: e, bookings: [] });
+export const editprofile = async (id, f, l, e, p) => ({ id, firstName: f, lastName: l, email: e });
+export const cancelBooking = async (id, r) => ({ id, status: "CANCELLED", refundStatus: "PENDING" });

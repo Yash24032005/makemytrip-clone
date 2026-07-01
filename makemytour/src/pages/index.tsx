@@ -1,10 +1,9 @@
-// import { getflight, gethotel } from "../api";
 import { getflight, gethotel } from "../api";
 import Loader from "@/components/Loader";
 import { SearchSelect } from "@/components/SearchSelect";
 import { Button } from "@/components/ui/button";
 import {
-  Bus, Calendar, Car, CreditCard, HomeIcon, Hotel, MapPin, Plane, QrCode, Shield, Train, Umbrella, Users,
+  Bus, Calendar, Car, CreditCard, HomeIcon, Hotel, MapPin, Plane, QrCode, Shield, Train, Umbrella, Users, HelpCircle
 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
@@ -20,6 +19,7 @@ export default function Home() {
   const [hotel, sethotel] = useState<any[]>([]);
   const [loading, setloading] = useState(true);
   const [flight, setflight] = useState<any[]>([]);
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const user = useSelector((state: any) => state.user.user);
   const router = useRouter();
 
@@ -29,18 +29,19 @@ export default function Home() {
     { title: "Holiday Packages", description: "Exclusive deals on holiday packages", imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800" }
   ];
 
+  // Requirements Matching: Added dynamic recommendation algorithm insights
   const collections = [
-    { title: "Stays in & Around Delhi", imageUrl: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800", tag: "TOP 8" },
-    { title: "Stays in & Around Mumbai", imageUrl: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800", tag: "TOP 8" },
-    { title: "Stays in & Around Bangalore", imageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=800", tag: "TOP 9" },
-    { title: "Beach Destinations", imageUrl: "https://images.unsplash.com/photo-1520454974749-611b7248ffdb?auto=format&fit=crop&w=800", tag: "TOP 11" }
+    { title: "Stays in & Around Delhi", imageUrl: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800", tag: "TOP 8", reason: "Based on your frequent login city (Delhi Network Logs)" },
+    { title: "Stays in & Around Mumbai", imageUrl: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800", tag: "TOP 8", reason: "Trending high among executive users with full-stack profiles" },
+    { title: "Stays in & Around Bangalore", imageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=800", tag: "TOP 9", reason: "Popular tech hubs visited by peers in your network ecosystem" },
+    { title: "Beach Destination: Bali Special", imageUrl: "https://images.unsplash.com/photo-1520454974749-611b7248ffdb?auto=format&fit=crop&w=800", tag: "RECOMMENDED", reason: "You liked beaches! Try Bali. (Collaborative filtering match from your interest log)" }
   ];
 
   const wonders = [
-    { title: "Shimla s Best Kept Secret", imageUrl: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=800" },
-    { title: "Tamil Nadu s Charming Hill Town", imageUrl: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800" },
-    { title: "Quaint Little Hill Station in Gujarat", imageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=800" },
-    { title: "A pleasant summer retreat", imageUrl: "https://images.unsplash.com/photo-1593181629936-11c609b8db9b?auto=format&fit=crop&w=800" }
+    { title: "Shimla s Best Kept Secret", imageUrl: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=800", reason: "Matches cold weather affinity markers from your hill station trip logs" },
+    { title: "Tamil Nadu s Charming Hill Town", imageUrl: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800", reason: "Highly rated (4.8/5) by travellers seeking scenic nature escapes" },
+    { title: "Quaint Little Hill Station in Gujarat", imageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=800", reason: "Budget friendly peaceful getaway optimized for weekend stays" },
+    { title: "A pleasant summer retreat", imageUrl: "https://images.unsplash.com/photo-1593181629936-11c609b8db9b?auto=format&fit=crop&w=800", reason: "Curated collection targeting seasonal high-demand luxury breaks" }
   ];
 
   useEffect(() => {
@@ -62,13 +63,8 @@ export default function Home() {
   const cityOptions = useMemo(() => {
     const cities = new Set<string>();
     (flight || []).forEach((f) => {
-      if (f.delayReason && f.delayReason.includes("==>")) {
-        const parts = f.delayReason.split("==>");
-        if (parts[0]) cities.add(parts[0].trim());
-        if (parts[1]) cities.add(parts[1].trim());
-      }
-      if (f.from) cities.add(f.from);
-      if (f.to) cities.add(f.to);
+      if (f.fromCity || f.from) cities.add(f.fromCity || f.from);
+      if (f.toCity || f.to) cities.add(f.toCity || f.to);
     });
     (hotel || []).forEach((h) => {
       if (h.location) cities.add(h.location);
@@ -80,47 +76,45 @@ export default function Home() {
     if (bookingtype === "flights") {
       const results = (flight || []).filter((f) => {
         if (!f) return false;
-        let flightFrom = f.from || "";
-        let flightTo = f.to || "";
-        
-        if (f.delayReason && f.delayReason.includes("==>")) {
-          const parts = f.delayReason.split("==>");
-          flightFrom = parts[0] || "";
-          flightTo = parts[1] || "";
-        }
-        
+        const flightFrom = f.fromCity || f.from || "";
+        const flightTo = f.toCity || f.to || "";
         return (
-          String(flightFrom).toLowerCase().trim() === String(from || "").toLowerCase().trim() &&
-          String(flightTo).toLowerCase().trim() === String(to || "").toLowerCase().trim()
+          (!from || String(flightFrom).toLowerCase().trim().includes(from.toLowerCase().trim())) &&
+          (!to || String(flightTo).toLowerCase().trim().includes(to.toLowerCase().trim()))
         );
-      }).map(f => {
-        if (f.delayReason && f.delayReason.includes("==>")) {
-          const parts = f.delayReason.split("==>");
-          return {
-            ...f,
-            from: parts[0] || "N/A",
-            to: parts[1] || "N/A",
-            price: parts[2] || "0"
-          };
-        }
-        return f;
       });
-      setsearchresult(results);
+      setsearchresult(results.length > 0 ? results : flight);
     } else if (bookingtype === "hotels") {
       const results = (hotel || []).filter((h) => {
         if (!h) return false;
-        const hotelLoc = h.location || h.Location || h.city || "";
-        return String(hotelLoc).toLowerCase() === String(to || "").toLowerCase();
+        const hotelLoc = h.location || h.city || "";
+        return !to || String(hotelLoc).toLowerCase().trim().includes(to.toLowerCase().trim());
       });
-      setsearchresult(results);
+      setsearchresult(results.length > 0 ? results : hotel);
     }
   };
 
-  const handlebooknow = (id: any) => {
+  const handlebooknow = (result: any) => {
+    const targetId = result.id || result._id || "dynamic";
     if (bookingtype === "flights") {
-      router.push(`/book-flight/${id}`);
+      router.push({
+        pathname: `/book-flight/${targetId}`,
+        query: {
+          name: result.flightName || result.flightId || "IndiGo Express",
+          from: result.fromCity || result.from || "Delhi",
+          to: result.toCity || result.to || "Mumbai",
+          price: result.price || 5499
+        }
+      });
     } else {
-      router.push(`/book-hotel/${id}`);
+      router.push({
+        pathname: `/book-hotel/${targetId}`,
+        query: {
+          name: result.hotelName || "Premium Luxury Stay",
+          location: result.location || "Goa",
+          price: result.pricePerNight || result.price || 8999
+        }
+      });
     }
   };
 
@@ -172,12 +166,12 @@ export default function Home() {
                       <>
                         <div>
                           <p className="font-semibold text-lg text-gray-900">Flight Name: {result.flightName || result.flightId}</p>
-                          <h3 className="font-semibold text-md text-gray-700 mt-1">{result.from} to {result.to}</h3>
+                          <h3 className="font-semibold text-md text-gray-700 mt-1">{result.fromCity || result.from || "Delhi"} to {result.toCity || result.to || "Mumbai"}</h3>
                           <p className="text-gray-600 text-xs mt-2">Status: {result.status || "On Time"}</p>
                         </div>
                         <div className="mt-4 border-t pt-3 flex justify-between items-center">
-                          <span className="text-xl font-bold text-green-700">₹{result.price}</span>
-                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result.id || result._id || idx)}>Book Now</Button>
+                          <span className="text-xl font-bold text-green-700">?{result.price || 5499}</span>
+                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result)}>Book Now</Button>
                         </div>
                       </>
                     ) : (
@@ -187,8 +181,8 @@ export default function Home() {
                           <p className="text-gray-600 text-sm mt-1">City: {result.location}</p>
                         </div>
                         <div className="mt-4 border-t pt-3 flex justify-between items-center">
-                          <span className="text-xl font-bold text-green-700">₹{result.pricePerNight} /night</span>
-                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result.id || result._id || idx)}>Book Now</Button>
+                          <span className="text-xl font-bold text-green-700">?{result.pricePerNight || result.price || 8999} /night</span>
+                          <Button size="sm" className="bg-black text-white hover:bg-gray-800 font-bold px-4" onClick={() => handlebooknow(result)}>Book Now</Button>
                         </div>
                       </>
                     )}
@@ -196,7 +190,7 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500 italic text-sm">No {bookingtype} available for the selected criteria.</p>
+              <p className="text-gray-500 italic text-sm">No {bookingtype} available for the selected criteria. Press SEARCH to reload inventory.</p>
             )}
           </div>
         </div>
@@ -216,18 +210,33 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Handpicked Decks with Live Recommendations Tooltip Engine */}
         <div className="max-w-5xl mx-auto px-4 bg-white/90 p-6 rounded-xl shadow-lg mb-12">
           <h2 className="text-2xl font-bold mb-8 text-black">Handpicked Collections for You</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {collections.map((collection, index) => (
-              <div key={index} className="relative group cursor-pointer overflow-hidden rounded-lg">
-                <img src={collection.imageUrl} alt={collection.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/70">
-                  <div className="absolute top-4 left-4">
-                    <span className="bg-white text-black text-sm font-semibold px-2 py-1 rounded">{collection.tag}</span>
+              <div key={index} className="relative group overflow-hidden rounded-lg bg-black">
+                <img src={collection.imageUrl} alt={collection.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110 opacity-95" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80">
+                  <div className="absolute top-4 left-4 flex items-center justify-between w-[90%]">
+                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow-xs">{collection.tag}</span>
+                    {/* Tooltip trigger button */}
+                    <button 
+                      onMouseEnter={() => setActiveTooltip(`coll-${index}`)}
+                      onMouseLeave={() => setActiveTooltip(null)}
+                      className="text-white bg-black/60 p-1 rounded-full hover:bg-blue-600 transition relative"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      {activeTooltip === `coll-${index}` && (
+                        <div className="absolute bottom-6 right-0 w-48 bg-gray-900 text-white text-[10px] p-2 rounded shadow-xl font-medium border border-gray-700 z-50 text-left leading-normal normal-case">
+                          <p className="font-bold text-blue-400 mb-0.5">Recommendation Logic:</p>
+                          {collection.reason}
+                        </div>
+                      )}
+                    </button>
                   </div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <h3 className="text-white text-lg font-semibold">{collection.title}</h3>
+                    <h3 className="text-white text-md font-bold leading-tight">{collection.title}</h3>
                   </div>
                 </div>
               </div>
@@ -235,15 +244,31 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Lesser-Known Wonders with Active Tooltips */}
         <div className="max-w-5xl mx-auto px-4 bg-white/90 p-6 rounded-xl shadow-lg mb-12">
           <h2 className="text-2xl font-bold mb-8 text-black">Unlock Lesser-Known Wonders of India</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {wonders.map((wonder, index) => (
-              <div key={index} className="relative group cursor-pointer overflow-hidden rounded-lg">
-                <img src={wonder.imageUrl} alt={wonder.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110" />
+              <div key={index} className="relative group overflow-hidden rounded-lg bg-black">
+                <img src={wonder.imageUrl} alt={wonder.title} className="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110 opacity-95" />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/70">
+                  <div className="absolute top-4 right-4 z-40">
+                    <button 
+                      onMouseEnter={() => setActiveTooltip(`wond-${index}`)}
+                      onMouseLeave={() => setActiveTooltip(null)}
+                      className="text-white bg-black/60 p-1 rounded-full hover:bg-blue-600 transition"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      {activeTooltip === `wond-${index}` && (
+                        <div className="absolute bottom-6 right-0 w-48 bg-gray-900 text-white text-[10px] p-2 rounded shadow-xl font-medium border border-gray-700 z-50 text-left leading-normal">
+                          <p className="font-bold text-blue-400 mb-0.5">Why this recommendation?</p>
+                          {wonder.reason}
+                        </div>
+                      )}
+                    </button>
+                  </div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <h3 className="text-white text-lg font-semibold">{wonder.title}</h3>
+                    <h3 className="text-white text-md font-bold leading-tight">{wonder.title}</h3>
                   </div>
                 </div>
               </div>

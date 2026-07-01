@@ -1,84 +1,55 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
-import Loader from "@/components/Loader";
-import { Button } from "@/components/ui/button";
+import { CreditCard, Building } from "lucide-react";
+import PricingEngine from "@/components/PricingEngine";
+import ReviewSection from "@/components/ReviewSection";
 
-export default function BookHotelPage() {
+export default function HotelCheckout() {
   const router = useRouter();
-  const { id } = router.query;
-  const [hotel, setHotel] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [txnId, setTxnId] = useState("");
+  const { name, location, price, id } = router.query;
 
-  const getBaseUrl = () => {
-    return typeof window !== "undefined" ? `http://${window.location.hostname}:8080` : "http://localhost:8080";
-  };
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchHotelDetails = async () => {
-      try {
-        const res = await axios.get(`${getBaseUrl()}/hotel`);
-        if (res.data && Array.isArray(res.data)) {
-          const found = res.data.find((h: any) => String(h.id || h._id) === String(id));
-          setHotel(found || { hotelName: "The Taj Mahal Hotel", location: "Delhi", pricePerNight: 4863 });
-        }
-      } catch (err) {
-        setHotel({ hotelName: "The Taj Mahal Hotel", location: "Delhi", pricePerNight: 4863 });
-      } finally {
-        setLoading(false);
-      }
+  const handlePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const newBooking = {
+      id: "BK-HT-" + Math.floor(Math.random() * 900 + 100),
+      type: "Hotel",
+      bookingId: "H" + Math.floor(Math.random() * 90000 + 10000),
+      date: new Date().toISOString().split('T')[0],
+      totalPrice: Number(price) || 8999,
+      status: "BOOKED",
+      details: { name: name || "Premium Stay", location: location || "Goa", nights: 3 }
     };
-    fetchHotelDetails();
-  }, [id]);
 
-  const handlePaymentSubmit = async () => {
-    try {
-      const res = await axios.post(`${getBaseUrl()}/booking/hotel?userId=guest&hotelId=${id || "1"}&rooms=1&price=${hotel?.pricePerNight || 4863}`);
-      setTxnId(res.data.bookingId || "BK" + Math.floor(Date.now()/1000));
-    } catch (err) {
-      setTxnId("BK" + Math.floor(Date.now()/1000));
-    } finally {
-      setPaymentSuccess(true);
-    }
+    const existing = JSON.parse(localStorage.getItem("local_bookings") || "[]");
+    localStorage.setItem("local_bookings", JSON.stringify([...existing, newBooking]));
+
+    alert(`💳 Stay Secured for ${name || "Hotel"}! Mapped to profile repository.`);
+    router.push("/profile");
   };
-
-  if (loading || !hotel) return <Loader />;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-black font-sans">
-      <div className="max-w-md w-full bg-white p-8 rounded-2xl border shadow-sm">
-        {!paymentSuccess ? (
-          <>
-            <h2 className="text-2xl font-black text-gray-900 mb-2">Confirm Your Stay</h2>
-            <p className="text-xs text-gray-500 mb-4">Please review hotel details before proceeding to payment.</p>
-            <div className="p-4 bg-gray-50 rounded-xl border mb-4">
-              <h3 className="font-bold text-lg text-blue-900">{hotel.hotelName}</h3>
-              <p className="text-sm text-gray-600 mt-1">📍 Location: {hotel.location}</p>
-            </div>
-            <div className="flex justify-between items-center py-3 border-b mb-6">
-              <span className="text-sm font-semibold text-gray-500">Price Per Night</span>
-              <span className="text-xl font-black text-green-700">₹{hotel.pricePerNight}</span>
-            </div>
-            <div className="flex space-x-3">
-              <Button onClick={() => router.push("/")} variant="outline" className="flex-1 py-5">Cancel</Button>
-              <Button onClick={handlePaymentSubmit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl py-5 shadow-sm">Proceed to Payment</Button>
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-4">
-            <span className="text-5xl">🎉</span>
-            <h2 className="text-2xl font-black text-green-600 mt-4">Booking Successful!</h2>
-            <p className="text-sm text-gray-500 mt-1">Your stay has been registered successfully.</p>
-            <div className="my-5 p-4 bg-green-50 rounded-xl border border-green-200 text-left text-xs space-y-1">
-              <p><strong>Booking ID:</strong> {txnId}</p>
-              <p><strong>Status:</strong> Active / Paid</p>
-            </div>
-            <Button onClick={() => router.push("/")} className="w-full bg-black text-white py-3 rounded-xl font-bold">Back to Home</Button>
+    <div className="min-h-screen bg-gray-50 py-12 px-4 text-black">
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="md:col-span-2 bg-white rounded-xl shadow p-6 border border-gray-200">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-green-600"><CreditCard /> Secure Hotel Payment</h2>
+          <PricingEngine />
+          <form onSubmit={handlePayment} className="mt-6 space-y-4">
+            <input type="text" placeholder="Cardholder Name" defaultValue="YASH BANSAL" className="w-full border p-2.5 rounded-lg font-medium bg-gray-50" required />
+            <input type="text" placeholder="Card Number" className="w-full border p-2.5 rounded-lg font-medium" required />
+            <div className="grid grid-cols-2 gap-4"><input type="text" placeholder="MM/YY" className="border p-2.5 rounded-lg text-center" required /><input type="password" placeholder="CVV" className="border p-2.5 rounded-lg text-center" required /></div>
+            <button type="submit" className="w-full bg-black hover:bg-gray-900 text-white font-bold py-3 rounded-lg transition">Confirm Stay (₹{price || "8,999"})</button>
+          </form>
+          <div className="mt-6 border-t pt-4"><ReviewSection targetId={id} /></div>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border border-gray-200 h-fit">
+          <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-1"><Building className="w-4 h-4 text-green-500"/> Stay Summary</h3>
+          <div className="space-y-2 text-sm text-gray-600 border-t pt-2">
+            <p><strong>Hotel Name:</strong> {name || "Premium Hotel"}</p>
+            <p><strong>Location:</strong> {location || "Goa"}</p>
+            <div className="border-t pt-2 mt-4 font-bold text-gray-900 flex justify-between"><span>Amount:</span><span className="text-green-700">₹{price || "8,999"}</span></div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

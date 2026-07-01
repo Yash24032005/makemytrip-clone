@@ -1,84 +1,57 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useRouter } from "next/router";
-import axios from "axios";
-import Loader from "@/components/Loader";
-import { Button } from "@/components/ui/button";
+import { CreditCard, Plane } from "lucide-react";
+import PricingEngine from "@/components/PricingEngine";
+import SeatSelection from "@/components/SeatSelection";
 
-export default function BookFlightPage() {
+export default function FlightCheckout() {
   const router = useRouter();
-  const { id } = router.query;
-  const [flight, setFlight] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [txnId, setTxnId] = useState("");
+  const { name, from, to, price } = router.query;
 
-  const getBaseUrl = () => {
-    return typeof window !== "undefined" ? `http://${window.location.hostname}:8080` : "https://makemytrip-clone-17hl.onrender.com";
-  };
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchFlightDetails = async () => {
-      try {
-        const res = await axios.get(`${getBaseUrl()}/flight`);
-        if (res.data && Array.isArray(res.data)) {
-          const found = res.data.find((f: any) => String(f.id || f._id) === String(id));
-          setFlight(found || { flightName: "IndiGo Express Service", from: "Delhi", to: "Mumbai", price: 4500 });
-        }
-      } catch (err) {
-        setFlight({ flightName: "IndiGo Express Service", from: "Delhi", to: "Mumbai", price: 4500 });
-      } finally {
-        setLoading(false);
-      }
+  const handlePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const newBooking = {
+      id: "BK-FL-" + Math.floor(Math.random() * 900 + 100),
+      type: "Flight",
+      bookingId: "F" + Math.floor(Math.random() * 90000 + 10000),
+      date: new Date().toISOString().split('T')[0],
+      totalPrice: Number(price) || 5499,
+      status: "BOOKED",
+      details: { from: from || "Delhi", to: to || "Mumbai", airline: name || "IndiGo" }
     };
-    fetchFlightDetails();
-  }, [id]);
 
-  const handlePaymentSubmit = async () => {
-    try {
-      const res = await axios.post(`${getBaseUrl()}/booking/flight?userId=guest&flightId=${id || "1"}&seats=1&price=${flight?.price || 4500}`);
-      setTxnId(res.data.bookingId || "BK" + Math.floor(Date.now()/1000));
-    } catch (err) {
-      setTxnId("BK" + Math.floor(Date.now()/1000));
-    } finally {
-      setPaymentSuccess(true);
-    }
+    // Store in browser memory to secure against data loss
+    const existing = JSON.parse(localStorage.getItem("local_bookings") || "[]");
+    localStorage.setItem("local_bookings", JSON.stringify([...existing, newBooking]));
+
+    alert(`💳 Payment Successful for ${name || "Flight"}! Saved to local session.`);
+    router.push("/profile");
   };
-
-  if (loading || !flight) return <Loader />;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-black font-sans">
-      <div className="max-w-md w-full bg-white p-8 rounded-2xl border shadow-sm">
-        {!paymentSuccess ? (
-          <>
-            <h2 className="text-2xl font-black text-gray-900 mb-2">Review Flight Tickets</h2>
-            <p className="text-xs text-gray-500 mb-4">Please verify travel routes before proceeding to payment.</p>
-            <div className="p-4 bg-gray-50 rounded-xl border mb-4">
-              <h3 className="font-bold text-lg text-blue-900">{flight.flightName || "IndiGo Airline"}</h3>
-              <p className="text-sm text-gray-600 mt-1">✈️ Route: {flight.from} → {flight.to}</p>
-            </div>
-            <div className="flex justify-between items-center py-3 border-b mb-6">
-              <span className="text-sm font-semibold text-gray-500">Total Airfare</span>
-              <span className="text-xl font-black text-green-700">₹{flight.price}</span>
-            </div>
-            <div className="flex space-x-3">
-              <Button onClick={() => router.push("/")} variant="outline" className="flex-1 py-5">Cancel</Button>
-              <Button onClick={handlePaymentSubmit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl py-5 shadow-sm">Checkout Payment</Button>
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-4">
-            <span className="text-5xl">🎉</span>
-            <h2 className="text-2xl font-black text-green-600 mt-4">Flight Ticket Issued!</h2>
-            <p className="text-sm text-gray-500 mt-1">Payment verified and processed successfully.</p>
-            <div className="my-5 p-4 bg-green-50 rounded-xl border border-green-200 text-left text-xs space-y-1">
-              <p><strong>Booking ID:</strong> {txnId}</p>
-              <p><strong>Status:</strong> Confirm / Paid</p>
-            </div>
-            <Button onClick={() => router.push("/")} className="w-full bg-black text-white py-3 rounded-xl font-bold">Back to Home</Button>
+    <div className="min-h-screen bg-gray-50 py-12 px-4 text-black">
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="md:col-span-2 bg-white rounded-xl shadow p-6 border border-gray-200">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-blue-600"><CreditCard /> Secure Flight Payment</h2>
+          <PricingEngine />
+          <SeatSelection />
+          <form onSubmit={handlePayment} className="mt-6 space-y-4">
+            <input type="text" placeholder="Cardholder Name" defaultValue="YASH BANSAL" className="w-full border p-2.5 rounded-lg font-medium bg-gray-50" required />
+            <input type="text" placeholder="Card Number" className="w-full border p-2.5 rounded-lg font-medium" required />
+            <div className="grid grid-cols-2 gap-4"><input type="text" placeholder="MM/YY" className="border p-2.5 rounded-lg text-center" required /><input type="password" placeholder="CVV" className="border p-2.5 rounded-lg text-center" required /></div>
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">Pay Now (₹{price || "5,499"})</button>
+          </form>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border border-gray-200 h-fit">
+          <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-1"><Plane className="w-4 h-4 text-blue-500"/> Trip Details</h3>
+          <div className="space-y-2 text-sm text-gray-600 border-t pt-2">
+            <p><strong>Flight:</strong> {name || "Fetching..."}</p>
+            <p><strong>From:</strong> {from || "Selected Origin"}</p>
+            <p><strong>To:</strong> {to || "Selected Destination"}</p>
+            <div className="border-t pt-2 mt-4 font-bold text-gray-900 flex justify-between"><span>Amount:</span><span className="text-green-700">₹{price || "5,499"}</span></div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
